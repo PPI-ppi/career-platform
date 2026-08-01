@@ -1,0 +1,210 @@
+"""LangGraph nodes for the Job Matcher agent."""
+
+import json
+import logging
+from typing import Dict
+
+from app.agents.job_matcher.state import JobMatcherState
+from app.agents.job_matcher import db_utils
+from app.agents.job_matcher.scorer import MatchScorer
+from app.agents.job_matcher.job_profiler import extract_job_requirements
+from app.agents.retry import SubModuleTracer
+from app.rag.retrievers import resume_job_matcher
+from app.db.neo4j import neo4j_manager
+
+logger = logging.getLogger(__name__)
+
+
+async def load_user_profile(state: JobMatcherState) -> Dict:
+    uid = state["user_id"]
+
+    # If frontend sent profile data (from profileState.js), use it directly
+    input_profile = state.get("user_profile", {})
+    if input_profile and input_profile.get("source") == "frontend":
+        radar = input_profile.get("radar_data", [])
+        if radar and any(v > 0 for v in radar):
+            # Also save to DB for future use
+            try:
+                await db_utils.save_user_profile(uid, input_profile)
+            except Exception:
+                pass
+            return {"user_profile": input_profile}
+
+    # Otherwise read from database
+    profile = await db_utils.get_user_profile(uid)
+    if profile:
+        pd = profile.get("profile_data", {})
+        if isinstance(pd, str):
+            try:
+                pd = json.loads(pd)
+            except Exception:
+                pd = {}
+        # Check if profile has meaningful data (radar_data with non-zero values)
+        radar = pd.get("radar_data", [])
+        if radar and any(v > 0 for v in radar):
+            return {"user_profile": pd}
+        # Profile exists but has no meaningful scores
+        return {"user_profile": {}, "error": "用户画像数据为空，请先在「职能助手」中完成对话分析"}
+
+    # If no user profile yet, check if there's one in the state
+    if state.get("user_profile"):
+        profile_data = state["user_profile"]
+        await db_utils.save_user_profile(uid, profile_data)
+        return {"user_profile": profile_data}
+
+    return {"user_profile": {}, "error": "未找到用户画像，请先在「职能助手」中完成对话分析"}
+
+
+async def retrieve_candidates(state: JobMatcherState) -> Dict:
+    """RAG: use resume text to find top candidate jobs via vector search.
+
+    Retrieves a larger pool (top_k=200) then deduplicates by job_title,
+    keeping one representative per unique title (the closest vector match).
+    Returns up to 10 unique job title IDs.
+    """
+    profile = state.get("user_profile", {})
+    profile_text = json.dumps(profile, ensure_ascii=False)
+
+    # Widen retrieval to cover more unique titles
+    candidate_ids = resume_job_matcher.retrieve_candidates(profile_text, top_k=200)
+    print(f"[Match] RAG returned {len(candidate_ids)} candidate IDs")
+    if not candidate_ids:
+        return {"candidate_job_ids": []}
+
+    # Deduplicate by job_title — keep the first (best vector match) per title
+    details = await db_utils.get_job_details([int(i) for i in candidate_ids])
+    print(f"[Match] DB returned {len(details)} job details for {len(candidate_ids)} IDs")
+    seen_titles: dict[str, str] = {}
+    for job in details:
+        title = (job.get("job_title") or "").strip()
+        if title and title not in seen_titles:
+            seen_titles[title] = str(job["id"])
+        if len(seen_titles) >= 10:
+            break
+
+    print(f"[Match] After dedup: {len(seen_titles)} unique titles: {list(seen_titles.keys())}")
+    return {"candidate_job_ids": list(seen_titles.values())}
+
+
+async def load_job_details(state: JobMatcherState) -> Dict:
+    ids = state.get("candidate_job_ids", [])
+    print(f"[Match] load_job_details: {len(ids)} candidate IDs: {ids[:15]}...")
+    if not ids:
+        # Fallback: user favorites
+        uid = state["user_id"]
+        fav_ids = await db_utils.get_user_favorites(uid)
+        if fav_ids:
+            ids = [str(i) for i in fav_ids]
+
+    if not ids:
+        return {"job_details": [], "match_results": []}
+
+    details = await db_utils.get_job_details([int(i) for i in ids])
+    return {"job_details": details}
+
+
+async def neo4j_enrich(state: JobMatcherState) -> Dict:
+    """Enrich job matching with Neo4j graph profiles.
+
+    Gracefully degrades when Neo4j is unavailable — matching proceeds
+    with RAG + algorithmic scoring only, without graph-based enrichment.
+    """
+    jobs = state.get("job_details", [])
+    profiles = []
+
+    try:
+        session = await neo4j_manager.get_session()
+        if session is None:
+            logger.info("[Match] Neo4j unavailable — skipping graph enrichment, using RAG+scoring only")
+            return {"neo4j_profiles": []}
+        for job in jobs:
+            result = await session.run(
+                "MATCH (jp:JobProfile {title: $title}) RETURN jp",
+                title=job.get("job_title", ""),
+            )
+            record = await result.single()
+            if record:
+                profiles.append(dict(record["jp"]))
+        await session.close()
+        logger.info(f"[Match] Neo4j enriched {len(profiles)}/{len(jobs)} jobs with graph profiles")
+    except Exception as e:
+        logger.warning(f"[Match] Neo4j enrichment failed — continuing without graph data: {e}")
+
+    return {"neo4j_profiles": profiles}
+
+
+async def algorithmic_match(state: JobMatcherState) -> Dict:
+    """Match jobs using job_profiler (LLM) + algorithmic scoring."""
+    import asyncio
+
+    # Check if there's an error from load_user_profile (no valid profile)
+    if state.get("error"):
+        return {"match_results": []}
+
+    profile = state.get("user_profile", {})
+    jobs = state.get("job_details", [])
+    logger.info(f"[Match] algorithmic_match: scoring {len(jobs)} jobs: {[j.get('job_title','?') for j in jobs]}")
+
+    if not jobs:
+        return {"match_results": []}
+
+    # Step 1: Get job requirements for each job (sub-module: job_profiler)
+    profiler_tracer = SubModuleTracer("job_matcher", "job_profiler")
+
+    async def get_job_requirements(job: dict) -> dict:
+        return await profiler_tracer.run(
+            extract_job_requirements, job,
+            timeout=60, default={},
+        )
+
+    # Run all job_profiler calls concurrently
+    req_tasks = [get_job_requirements(job) for job in jobs]
+    all_requirements = await asyncio.gather(*req_tasks)
+
+    # Step 2: Compute match scores using the scorer
+    scorer = MatchScorer()
+    results = []
+    for job, job_reqs in zip(jobs, all_requirements):
+        try:
+            score_result = scorer.compute_scores(profile, job_reqs, job_info=job)
+        except Exception as e:
+            print(f"[Match] scorer error: {e}")
+            score_result = {
+                "total_score": 0, "scores": {},
+                "summary": "评分异常", "recommendations": [],
+            }
+        results.append({
+            "job_id": job.get("id"),
+            "job_title": job.get("job_title", ""),
+            "company": job.get("company", ""),
+            "industry": job.get("industry", ""),
+            "city": job.get("city", ""),
+            "salary_range": job.get("salary_range", ""),
+            **score_result,
+        })
+
+    results.sort(key=lambda r: r.get("total_score", 0), reverse=True)
+    return {"match_results": results}
+
+
+async def rank_results(state: JobMatcherState) -> Dict:
+    results = state.get("match_results", [])
+    ranked = sorted(results, key=lambda r: r.get("total_score", 0), reverse=True)
+    return {"ranked_results": ranked}
+
+
+async def save_report(state: JobMatcherState) -> Dict:
+    uid = state["user_id"]
+    ranked = state.get("ranked_results", [])
+
+    for r in ranked[:5]:  # Top 5
+        await db_utils.save_match_report(
+            user_id=uid,
+            job_name=r.get("job_title", ""),
+            match_score=float(r.get("total_score", 0)),
+            report_data=r,
+            industry=r.get("industry", ""),
+            city=r.get("city", ""),
+        )
+
+    return {"report_id": 0}
