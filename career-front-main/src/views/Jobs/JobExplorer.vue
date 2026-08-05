@@ -94,7 +94,7 @@
           <div class="preview-icon-ring">
             <el-icon class="guide-icon"><Pointer /></el-icon>
           </div>
-          <p class="preview-hint-title">职位画像预览</p>
+          <p class="preview-hint-title">能力模型预览</p>
           <p class="preview-hint-desc">悬停左侧卡片查看详情<br/>点击进入深度画像页面</p>
         </div>
         <div v-else class="preview-active">

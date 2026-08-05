@@ -6,7 +6,7 @@
         <el-icon><User /></el-icon>
         个人信息画像
       </h2>
-      <p class="page-desc">职能助手深度分析你的个人能力画像，生成专属诊断报告</p>
+      <p class="page-desc">AI 学习导师深度分析你的个人能力画像，生成专属诊断报告</p>
     </div>
 
     <transition name="loading-fade">
@@ -14,7 +14,7 @@
         <InteractiveLoading
           title="深度诊断中"
           description="正在融合画像数据与诊断模型，生成个性化分析报告"
-          statusText="职能助手诊断引擎运行中"
+          statusText="AI 学习导师诊断引擎运行中"
           :steps="loadingSteps"
           :currentStep="currentLoadingStep"
           :progress="loadingProgress"
@@ -437,7 +437,7 @@ const buildFromProfileData = async (forceApi = false) => {
       if (weak.length) report += `${weak.join('、')}方面仍有提升空间。`
     }
     if (pending.length) report += `尚未采集${pending.join('、')}相关信息。`
-    if (!report) report = '请在职能助手中提供更多个人信息以生成诊断报告。'
+    if (!report) report = '请在AI 学习导师中提供更多个人信息以生成诊断报告。'
     analysisReport.value = report
   }
 

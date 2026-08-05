@@ -9,7 +9,7 @@
     </el-button>
   </div>
   
-  <h1 class="page-title">岗位详情画像</h1>
+  <h1 class="page-title">能力模型详情</h1>
   
   <div class="actions">
     <el-button @click="toggleFavorite" link>
@@ -38,7 +38,7 @@
       </el-card>
 
       <el-card class="card intro-card"> <template #header>
-          <span>岗位介绍</span>
+          <span>岗位技能对标</span>
         </template>
         
         <div v-if="loading" class="skeleton">
@@ -77,23 +77,12 @@
         </div>
       </el-card>
 
-      <!-- 岗位要求画像 -->
+      <!-- 能力要求画像 -->
       <el-card class="card">
         <template #header>
-          <span>岗位要求画像</span>
+          <span>能力要求画像</span>
         </template>
         <JobKnowledgeGraph :job-title="job?.title" :key="job?.title" />
-      </el-card>
-
-      <el-card class="card promotion-card">
-        <template #header>
-          <div class="card-header">
-            <el-icon><TrendCharts /></el-icon>
-            <span>岗位换岗晋升图</span>
-          </div>
-        </template>
-        
-        <PromotionGraph :jobTitle="job?.title" />
       </el-card>
 
     </main>
@@ -107,7 +96,6 @@ import { ArrowLeft, Star, StarFilled, OfficeBuilding } from '@element-plus/icons
 import { ElMessage } from 'element-plus'
 import { jobsApi } from '@/api/jobs'
 import { favoritesApi } from '@/api/favorites'
-import PromotionGraph from '@/components/PromotionGraph.vue'
 import JobKnowledgeGraph from '@/components/JobKnowledgeGraph.vue'
 
 const loading = ref(true)
@@ -474,7 +462,7 @@ const toggleFavorite = async () => {
   }
 }
 
-/* --- 7. 岗位介绍内容的间距微调 --- */
+/* --- 7. 岗位技能对标内容的间距微调 --- */
 :deep(.el-card__body) {
   padding: 25px !important;
 }
@@ -498,7 +486,7 @@ const toggleFavorite = async () => {
   }
 }
 
-/* 1. 岗位介绍卡片：完整展示，不裁剪内容 */
+/* 1. 岗位技能对标卡片：完整展示，不裁剪内容 */
 .intro-card {
   position: relative;
   overflow: visible !important;
@@ -511,7 +499,7 @@ const toggleFavorite = async () => {
   }
 }
 
-/* 2. 岗位介绍文字：完整显示，自动换行 */
+/* 2. 岗位技能对标文字：完整显示，自动换行 */
 .description {
   position: relative;
   z-index: 2;
@@ -764,7 +752,7 @@ const toggleFavorite = async () => {
   }
 }
 
-/* --- 岗位换岗晋升图专属样式 --- */
+/* --- 岗位技能对标专属样式 --- */
 .promotion-card :deep(.el-card__body) {
   padding: 20px;
   height: auto;

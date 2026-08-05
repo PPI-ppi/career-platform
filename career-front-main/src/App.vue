@@ -14,7 +14,19 @@
       
       <div class="navbar-center">
         <router-link to="/" class="nav-link">首页</router-link>
-        <router-link to="/jobs" class="nav-link">岗位探索</router-link>
+        <router-link to="/jobs" class="nav-link">能力目标库</router-link>
+        <el-dropdown class="nav-link-dropdown" trigger="hover" placement="bottom" @command="handleNavCommand">
+          <span class="nav-link nav-dropdown-trigger">
+            实训与反馈
+            <el-icon class="dropdown-arrow"><arrow-down /></el-icon>
+          </span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="/training">个性化实训台</el-dropdown-item>
+              <el-dropdown-item command="/feedback">反馈与复盘中心</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <router-link to="/profile" class="nav-link">个人中心</router-link>
       </div>
       
@@ -69,6 +81,10 @@ const handleLogin = () => {
 const handleLogout = async () => {
   await auth.logout()
   router.push('/')
+}
+
+const handleNavCommand = (command) => {
+  router.push(command)
 }
 </script>
 
@@ -264,6 +280,46 @@ background: linear-gradient(
 // 退出登录按钮标红
 .logout-item {
   color: #f56c6c !important;
+}
+
+// 实训与反馈下拉菜单
+.nav-link-dropdown {
+  outline: none;
+
+  .nav-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+
+  .dropdown-arrow {
+    font-size: 12px;
+    transition: transform 0.3s;
+  }
+
+  &:hover .dropdown-arrow {
+    transform: rotate(180deg);
+  }
+}
+
+// 全局教育边界声明
+.edu-disclaimer-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 40px;
+  background: rgba(255, 250, 235, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(230, 162, 60, 0.25);
+  color: #8a6d3b;
+  font-size: 13px;
+
+  .el-icon {
+    color: #e6a23c;
+  }
 }
 }
 </style>

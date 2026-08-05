@@ -7,6 +7,12 @@ import os
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
+# Load BGE model offline from cache. The constructor otherwise reaches out to
+# huggingface.co to check for updates, which hangs on networks that can't reach
+# it (e.g. mainland China). Model files ship via the local HF cache; if the
+# model is missing, get_embeddings() falls back to _SimpleEmbeddings.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
 _fallback_mode = False
 
 

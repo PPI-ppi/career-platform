@@ -2,7 +2,7 @@
   <div class="ai-report-container">
     <div class="ai-report-content">
       <el-tabs v-model="activeTab" @tab-click="handleTabClick" class="glass-tabs">
-        <el-tab-pane label="人岗匹配度" name="matching">
+        <el-tab-pane label="能力对标度" name="matching">
           <div class="matching-section fade-in">
             
             <section class="overview-section">
@@ -10,11 +10,11 @@
                 <el-col :xs="24" :sm="24" :md="10" :lg="9">
                   <div class="card glass-card gauge-card accent-blue">
                     <h3 class="card-title">
-                      <el-icon><Histogram /></el-icon>总体匹配度
+                      <el-icon><Histogram /></el-icon>总体对标度
                     </h3>
                     <div class="target-job-info">
                       <span class="dot"></span>
-                      <span class="job-label">目标岗位：</span>
+                      <span class="job-label">我的学习目标：</span>
                       <span class="job-name">{{ targetJobName || '--' }}</span>
                     </div>
                     <div class="gauge-wrapper">
@@ -226,7 +226,7 @@ const loadMapData = async () => {
 const fetchMatchingData = async () => {
   try {
     const { data } = await matchingApi.match()
-    // 总体匹配度
+    // 总体对标度
     if (data.ranked_results && data.ranked_results.length > 0) {
       const top = data.ranked_results[0]
       overallScore.value = Math.round((top.score || top.overall_score || 85) * 100) / 100
@@ -264,7 +264,7 @@ const fetchMatchingData = async () => {
       }
     }
   } catch {
-    ElMessage.warning('获取匹配数据失败')
+    ElMessage.warning('获取对标数据失败')
   }
 }
 
@@ -305,7 +305,7 @@ const applyProfileData = () => {
 
   const avgScore = totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0
 
-  // 只要有1个维度已分析就更新（画像数据优先级高于匹配数据）
+  // 只要有1个维度已分析就更新（画像数据优先级高于对标数据）
   const analyzedCount = skills.filter(s => s.status === '已分析').length
   console.log('[AIReport] analyzedCount:', analyzedCount, 'avgScore:', avgScore, 'skills:', skills.map(s => `${s.name}:${s.score}`))
   if (analyzedCount >= 1) {
@@ -320,7 +320,7 @@ const applyProfileData = () => {
     let summary = `综合得分${avgScore}分。`
     if (strong.length) summary += `优势维度：${strong.join('、')}。`
     if (weak.length) summary += `待提升：${weak.join('、')}。`
-    if (pending.length) summary += `未采集：${pending.join('、')}，建议在职能助手中补充。`
+    if (pending.length) summary += `未采集：${pending.join('、')}，建议在AI 学习导师中补充。`
     aiSummary.value = summary
   }
 }
@@ -368,11 +368,11 @@ const promotionData = ref([])
 
 // ==================== 3. 辅助函数 ====================
 const getScoreLevel = (score) => {
-  if (score >= 90) return '🏅 卓越匹配'
-  if (score >= 80) return '🚀 高度匹配'
-  if (score >= 70) return '👍 良好匹配'
-  if (score >= 60) return '⚠️ 基本匹配'
-  return '❌ 匹配度较低'
+  if (score >= 90) return '🏅 卓越对标'
+  if (score >= 80) return '🚀 高度对标'
+  if (score >= 70) return '👍 良好对标'
+  if (score >= 60) return '⚠️ 基本对标'
+  return '❌ 对标度较低'
 }
 
 // 🌟 美化点: 根据分数返回 Badge 样式类
@@ -399,7 +399,7 @@ const formatAnalysisText = (text) => text
 
 // ==================== 4. ECharts 初始化方法 (深度美化) ====================
 
-// 🅰️ 人岗匹配 Tab 1
+// 🅰️ 能力对标 Tab 1
 
 // 1. 仪表盘 - 升级为更通透的 LinearGradient
 const initGaugeChart = () => {
@@ -730,7 +730,7 @@ onMounted(async () => {
   // 1. 预加载地图数据，防止闪烁
   loadMapData()
 
-  // 2. 并行获取人岗匹配 + 职业规划数据
+  // 2. 并行获取能力对标 + 职业规划数据
   await Promise.all([fetchMatchingData(), fetchPlanningData()])
 
   // 3. 画像分析数据覆盖（优先级更高）
@@ -874,7 +874,7 @@ onUnmounted(() => {
 // ==================== Tab 1:Matching 样式美化 ====================
 .overview-section { margin-bottom: 24px; }
 
-/* 总体匹配度仪表盘卡片 */
+/* 总体对标度仪表盘卡片 */
 .gauge-card {
   text-align: center;
   min-height: 350px;
@@ -973,7 +973,7 @@ onUnmounted(() => {
   }
 }
 
-/* 人岗诊断区 */
+/* 能力诊断区 */
 .analysis-section {
   .markdown-body {
     background: rgba(255, 255, 255, 0.3);

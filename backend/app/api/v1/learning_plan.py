@@ -106,11 +106,25 @@ class TaskUpdateRequest(BaseModel):
     status: str
 
 
+TRAINING_TUTOR_SYSTEM_PROMPT = (
+    "你是 AI 实训导师，面向计算机/IT 方向学生的职业教育与就业辅导助手。\n"
+    "你的职责：围绕用户当前实训任务，通过对话出题、引导思考、判断水平，帮助用户以练促学。\n"
+    "规则：\n"
+    "1. 不可以直接给出答案或完整实现，先引导用户说出自己的思路与做法\n"
+    "2. 针对任务提出 1 个具体子问题或考查点，逐步拆解，而非一次性给全\n"
+    "3. 收到用户思路后，指出其盲点与可改进处，再给提示或同类练习\n"
+    "4. 在对话中自然评估用户水平（基础/进阶/熟练），但仅作为学习辅助参考，明确不替代教师或学校的正式评价\n"
+    "5. 语气像学长，鼓励为主，简短直接，回复不超过120字，禁止 markdown 符号\n"
+    "6. 若涉及当前实训任务，请紧扣任务目标与能力要求出题与引导"
+)
+
+
 class CoachRequest(BaseModel):
     message: str
     history: List[dict] = []  # [{role: "user"|"assistant", content: str}]
     previous_radar_data: List[int] = []
     previous_details: Optional[dict] = None
+    task_context: Optional[str] = None  # 当前实训任务上下文，非空时切换为实训导师模式
 
 
 class ParseFileRequest(BaseModel):
@@ -421,7 +435,8 @@ async def career_coach(req: CoachRequest, user: dict = Depends(get_current_user)
 
     llm = get_llm(temperature=0.7, max_tokens=200)
 
-    messages = [SystemMessage(content=COACH_SYSTEM_PROMPT)]
+    system_prompt = TRAINING_TUTOR_SYSTEM_PROMPT if req.task_context else COACH_SYSTEM_PROMPT
+    messages = [SystemMessage(content=system_prompt)]
     for h in req.history[-10:]:
         role = h.get("role", "user")
         content = h.get("content", "")
@@ -430,7 +445,8 @@ async def career_coach(req: CoachRequest, user: dict = Depends(get_current_user)
         elif role == "assistant":
             messages.append(AIMessage(content=content))
 
-    messages.append(HumanMessage(content=req.message))
+    user_content = f"[当前实训任务] {req.task_context}\n用户：{req.message}" if req.task_context else req.message
+    messages.append(HumanMessage(content=user_content))
 
     try:
         response = await asyncio.wait_for(llm.ainvoke(messages), timeout=30)
@@ -508,7 +524,8 @@ async def coach_stream(req: CoachRequest, user: dict = Depends(get_current_user)
 
     llm = get_llm(temperature=0.7, max_tokens=200)
 
-    messages = [SystemMessage(content=COACH_SYSTEM_PROMPT)]
+    system_prompt = TRAINING_TUTOR_SYSTEM_PROMPT if req.task_context else COACH_SYSTEM_PROMPT
+    messages = [SystemMessage(content=system_prompt)]
     for h in req.history[-10:]:
         role = h.get("role", "user")
         content = h.get("content", "")
@@ -516,7 +533,8 @@ async def coach_stream(req: CoachRequest, user: dict = Depends(get_current_user)
             messages.append(HumanMessage(content=content))
         elif role == "assistant":
             messages.append(AIMessage(content=content))
-    messages.append(HumanMessage(content=req.message))
+    user_content = f"[当前实训任务] {req.task_context}\n用户：{req.message}" if req.task_context else req.message
+    messages.append(HumanMessage(content=user_content))
 
     async def event_stream():
         full_reply = ""

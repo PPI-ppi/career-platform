@@ -6,7 +6,7 @@ const DIMENSIONS = ['专业技能', '创新能力', '学习能力', '实习能�
 export const currentRadarData = ref([0, 0, 0, 0, 0, 0, 0])
 export const dimensionDetailsRaw = ref(null)
 
-// 人岗匹配版本号，每次重新匹配时递增，用于触发成长追踪重新加载
+// 能力对标版本号，每次重新对标时递增，用于触发个性化实训台重新加载
 export const matchVersion = ref(0)
 
 export const dimensionDetails = computed(() => {

@@ -12,7 +12,7 @@
         <div class="search-box">
           <el-input
             v-model="searchKeyword"
-            placeholder="输入一个目标职业（如：UI设计师），查看我的匹配度与晋升路径"
+            placeholder="输入目标岗位（如：Java工程师），查看能力拆解与差距"
             size="large"
             clearable
             @keydown.enter="handleSearch"
@@ -54,7 +54,7 @@
           <template #header>
             <div class="card-header">
               <el-icon><Grid /></el-icon>
-              <span>岗位动态监测哨</span>
+              <span>能力需求风向标</span>
             </div>
           </template>
 <div class="category-list-container"> <div class="scrolling-wrapper">
@@ -88,33 +88,35 @@
           <div class="popover-ai-content">
             <div class="pop-header">
               <el-icon class="ai-pulse"><MagicStick /></el-icon>
-              <span>职能助手 · 入职预测</span>
+              <span>AI能力建模·达标预测</span>
             </div>
 
             <div class="prediction-main">
               <div class="predict-item">
                 <div class="predict-label-row">
-                  <span class="label">入职胜率预测</span>
-                  <span class="value success-text">{{ calculateWinRate(category) }}%</span>
+                  <span class="label">岗位能力达成度预测</span>
+                  <span class="value success-text">{{ calculateAchievement(category) }}%</span>
                 </div>
                 <el-progress 
-                  :percentage="calculateWinRate(category)" 
+                  :percentage="calculateAchievement(category)" 
                   :stroke-width="8" 
                   :show-text="false"
                   color="#67c23a" 
                 />
-                <p class="base-info">基于你的竞争力评分: <strong>{{ competitivenessScore }}</strong></p>
+                <p class="base-info">基于你的技能基线评分: <strong>{{ competitivenessScore }}</strong></p>
               </div>
 
               <div class="salary-forecast-card">
                 <div class="forecast-item">
-                  <span class="f-label">预估谈薪溢价</span>
-                  <span class="f-value">+{{ calculateSalaryPremium(category) }}%</span>
+                  <span class="f-label">技能市场稀缺度指数</span>
+                  <el-tag size="mini" :type="scarcityType(category)" effect="dark">
+                    {{ category.insight.scarcity || '高' }}
+                  </el-tag>
                 </div>
                 <div class="scarcity-info">
-                  <span class="s-label">核心稀缺度：</span>
-                  <el-tag size="mini" type="warning" effect="dark">
-                    {{ category.insight.scarcity || '高需求' }}
+                  <span class="s-label">核心短板：</span>
+                  <el-tag size="mini" type="danger" effect="plain">
+                    {{ category.insight.weakness || '核心技能' }}
                   </el-tag>
                 </div>
               </div>
@@ -123,7 +125,7 @@
             <el-divider border-style="dashed" style="margin: 12px 0" />
 
             <div class="mentor-suggestion">
-              <span class="suggestion-label">🤖 Agent 策略决策：</span>
+              <span class="suggestion-label">🤖 AI 学习策略：</span>
               <p class="suggestion-text">
                 {{ generateAgentDecision(category) }}
               </p>
@@ -144,11 +146,11 @@
           <div class="card-bg" style="background-image: url('https://placehold.co/600x300/667eea/ffffff?text=Explore+Jobs');"></div>
           <div class="card-overlay"></div>
           <div class="card-content">
-            <h2 class="card-title">分析职位画像</h2>
-            <p class="card-desc">海量职位，智能匹配</p>
+            <h2 class="card-title">浏览能力目标库</h2>
+            <p class="card-desc">岗位拆解能力图谱，对标差距</p>
             <el-button type="primary" size="large" class="card-btn">
               <el-icon><Search /></el-icon>
-              立即探索
+              立即浏览
             </el-button>
           </div>
         </div>
@@ -158,11 +160,11 @@
           <div class="card-bg" style="background-image: url('https://placehold.co/600x300/764ba2/ffffff?text=Assessment');"></div>
           <div class="card-overlay"></div>
           <div class="card-content">
-            <h2 class="card-title">诊断职业竞争力</h2>
-            <p class="card-desc">职能助手评估，精准定位</p>
+            <h2 class="card-title">校准我的技能基线</h2>
+            <p class="card-desc">完善项目与技能数据，校准基线</p>
             <el-button type="success" size="large" class="card-btn">
               <el-icon><Document /></el-icon>
-              立即测评
+              立即校准
             </el-button>
           </div>
         </div>
@@ -174,7 +176,7 @@
           <!-- 顶部状态栏 -->
           <div class="rp-status-bar">
             <div class="pulse-dot"></div>
-            <span>职能助手 · 职场导航</span>
+            <span>AI 学习导师 · 职场导航</span>
           </div>
 
           <!-- 加载态 -->
@@ -194,15 +196,15 @@
               </svg>
             </div>
             <div class="rp-empty-title">暂无个人画像</div>
-            <div class="rp-empty-desc">前往个人中心填写简历信息，<br/>职能助手将为你生成职场画像与每日任务</div>
+            <div class="rp-empty-desc">前往个人中心填写简历信息，<br/>AI 学习导师将为你生成职场画像与每日任务</div>
             <el-button type="primary" round class="rp-empty-btn" @click="router.push('/profile/info')">
               <el-icon><User /></el-icon> 前往个人中心
             </el-button>
           </div>
 
-          <!-- 有数据：个人信息 + 每日任务 -->
+          <!-- 有数据：画像概览（雷达图 + 缺口词云）/ 任务预览 -->
           <div v-else class="rp-content">
-            <!-- 第一页：画像概览 + 每日任务 -->
+            <!-- 第一页：画像概览 -->
             <div :class="['rp-page rp-page-front', { 'is-back': !isFrontPage }]">
               <!-- 用户头像行 + 综合评分 -->
               <div class="rp-user-row">
@@ -220,19 +222,33 @@
                 </div>
               </div>
 
-              <!-- 七维度网格 -->
-              <div class="rp-radar-grid">
-                <div v-for="(dim, idx) in RADAR_DIMS" :key="dim" class="rp-radar-cell">
-                  <span class="rp-radar-val" :class="{ active: currentRadarData[idx] > 0 }">{{ currentRadarData[idx] || 0 }}</span>
-                  <span class="rp-radar-name">{{ dim }}</span>
-                </div>
+              <!-- 能力雷达图 -->
+              <div class="rp-radar-chart">
+                <div ref="radarChartEl" class="radar-chart"></div>
               </div>
 
-              <!-- 每日任务 -->
+              <!-- 能力缺口词云 -->
+              <div class="rp-gap-cloud">
+                <div class="rp-gap-title">能力缺口词云</div>
+                <div class="cloud-body">
+                  <span
+                    v-for="gap in skillGaps"
+                    :key="gap.name"
+                    :class="['cloud-tag', gap.level]"
+                    :style="{ fontSize: cloudFontSize(gap) }"
+                    :title="gap.status"
+                  >{{ gap.name }}</span>
+                  <span v-if="skillGaps.length === 0" class="rp-tasks-empty">暂无缺口数据</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 第二页：任务预览 + Agent 建议 -->
+            <div :class="['rp-page rp-page-back', { 'is-front': !isFrontPage }]">
               <div class="rp-tasks">
                 <div class="rp-tasks-header">
                   <el-icon><Calendar /></el-icon>
-                  <span>每日待办</span>
+                  <span>任务预览</span>
                   <el-tag size="small" type="info" effect="plain" class="rp-tasks-tag">Agent 推荐</el-tag>
                 </div>
                 <div v-if="tasksLoading" class="rp-tasks-loading">
@@ -250,34 +266,11 @@
                 </div>
               </div>
             </div>
-
-            <!-- 第二页：能力缺口 + Agent 建议 -->
-            <div :class="['rp-page rp-page-back', { 'is-front': !isFrontPage }]">
-              <div class="rp-gap-title">能力差距分析</div>
-              <div class="rp-gap-list">
-                <div v-for="gap in skillGaps" :key="gap.name" class="rp-gap-item">
-                  <div class="rp-gap-head">
-                    <span class="rp-gap-name">{{ gap.name }}</span>
-                    <span :class="['rp-gap-tag', gap.level]">{{ gap.status }}</span>
-                  </div>
-                  <el-progress :percentage="gap.percent" :stroke-width="5" :show-text="false" :color="gap.color" />
-                </div>
-                <div v-if="skillGaps.length === 0" class="rp-tasks-empty">暂无缺口数据</div>
-              </div>
-
-              <div class="rp-advice">
-                <div class="rp-advice-header">
-                  <el-icon class="rp-advice-icon"><MagicStick /></el-icon>
-                  <span>Agent 建议</span>
-                </div>
-                <p class="rp-advice-text">{{ shortAgentAdvice }}</p>
-              </div>
-            </div>
           </div>
 
           <!-- 底部入口 -->
-          <el-button type="primary" class="rp-bottom-btn" round @click="$router.push('/growth-tracking')">
-            查看完整全周期规划 <el-icon><ArrowRight /></el-icon>
+          <el-button type="primary" class="rp-bottom-btn" round @click="$router.push('/training')">
+            查看我的动态实训路线 <el-icon><ArrowRight /></el-icon>
           </el-button>
         </el-card>
       </section>
@@ -303,7 +296,7 @@
 
   <div class="center-text-block center-node" ref="centerNode">
     <div class="small-title">AURORA ENGINE 2.0</div>
-    <div class="big-data">基于 <span class="highlight">10,000+</span> 岗位数据</div>
+    <div class="big-data">基于 <span class="highlight">10,000+</span> 职业能力基准模型</div>
     <div class="ai-analysis">复杂网络分析</div>
   </div>
 
@@ -377,7 +370,7 @@
 
     <!-- 底部信息 -->
     <footer class="home-footer">
-      <p>© 2026 职途无限 - 职能助手</p>
+      <p>© 2026 职途无限 - AI 学习导师</p>
       <p class="footer-links">
         <el-link type="info">公司简介</el-link>
         <span class="divider">|</span>
@@ -394,7 +387,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Search,
@@ -439,14 +432,26 @@ const overallScore = computed(() => {
 const loadHotJobs = async () => {
   try {
     const { data } = await jobsApi.list({ page_size: 10 })
-    const matchRates = [96, 93, 91, 88, 86, 84, 81, 78, 75, 72]
+    const overlapRates = [96, 93, 91, 88, 86, 84, 81, 78, 75, 72]
+    const weaknessPool = [
+      ['WebAssembly', '性能优化'],
+      ['高并发锁机制', '分布式事务'],
+      ['模型微调', 'RAG 工程'],
+      ['数据驱动决策', 'A/B 实验'],
+      ['零信任架构', '漏洞挖掘'],
+      ['自动化报表', '数据建模'],
+      ['跨端框架', '原生适配'],
+      ['AIOps', '告警预测'],
+      ['用户行为分析', '动效设计'],
+      ['全链路压测', '安全扫描'],
+    ]
+    const studyWeeksPool = [8, 10, 6, 12, 9, 7, 11, 8, 10, 6]
     hotJobs.value = (data.jobs || []).map((item, index) => ({
       id: item.id,
       jobTitle: item.job_title || item.title,
-      companyName: item.company_name || item.company,
-      location: item.city || '--',
-      matchRate: item.match_rate || matchRates[index] || (70 + Math.floor(Math.random() * 20)),
-      salary: item.salary_range || item.salary || '面议',
+      overlapRate: item.match_rate || overlapRates[index] || (70 + Math.floor(Math.random() * 20)),
+      studyWeeks: studyWeeksPool[index] || 8,
+      topWeaknesses: weaknessPool[index] || ['核心技能', '经验积累'],
       tags: item.industry ? item.industry.split(',').slice(0, 3) : [],
       raw: { industry: item.industry || '' },
     }))
@@ -491,25 +496,78 @@ const checkProfileStatus = async () => {
   }
 }
 
-// 计算胜率：个人分 / 岗位要求分 (假设 category 里有要求分)
-const calculateWinRate = (category) => {
+// ========== 能力雷达图 ==========
+const radarChartEl = ref(null)
+let radarChartInstance = null
+
+const renderRadarChart = () => {
+  if (!radarChartEl.value) return
+  if (!radarChartInstance) {
+    radarChartInstance = echarts.init(radarChartEl.value)
+  }
+  radarChartInstance.setOption({
+    radar: {
+      indicator: RADAR_DIMS.map((dim) => ({ name: dim, max: 100 })),
+      radius: '68%',
+      center: ['50%', '52%'],
+      splitNumber: 4,
+      axisName: { color: '#606266', fontSize: 10 },
+      axisLine: { lineStyle: { color: '#e5e9f2' } },
+      splitLine: { lineStyle: { color: '#e5e9f2' } },
+      splitArea: { areaStyle: { color: ['rgba(64, 158, 255, 0.03)', 'rgba(64, 158, 255, 0.08)'] } },
+    },
+    series: [{
+      type: 'radar',
+      symbolSize: 4,
+      data: [{
+        value: RADAR_DIMS.map((_, i) => currentRadarData.value[i] || 0),
+        name: '能力基线',
+        areaStyle: { color: 'rgba(64, 158, 255, 0.25)' },
+        lineStyle: { color: '#409EFF', width: 2 },
+        itemStyle: { color: '#409EFF' },
+      }],
+    }],
+  })
+}
+
+const disposeRadarChart = () => {
+  if (radarChartInstance) {
+    radarChartInstance.dispose()
+    radarChartInstance = null
+  }
+}
+
+// 词云字号：缺口越大（掌握度越低）字体越大
+const cloudFontSize = (gap) => {
+  const severity = 100 - (gap.percent || 70)
+  const size = Math.max(12, Math.min(26, 13 + Math.round(severity / 7)))
+  return `${size}px`
+}
+
+watch([hasProfile, currentRadarData], () => {
+  if (hasProfile.value) {
+    nextTick(() => renderRadarChart())
+  }
+}, { deep: true })
+
+// 计算能力达成度：个人分 / 岗位要求分 (假设 category 里有要求分)
+const calculateAchievement = (category) => {
   const baseRate = 70; // 基础分
-  const scoreDiff = (competitivenessScore.value - 700) / 10; 
+  const scoreDiff = (competitivenessScore.value - 700) / 10;
   return Math.min(98, Math.max(40, Math.floor(baseRate + scoreDiff)));
 };
 
-// 计算溢价：基于稀缺度
-const calculateSalaryPremium = (category) => {
-  // 模拟：后端/AI 岗位溢价高，UI 岗位溢价平稳
-  return category.name.includes('AI') || category.name.includes('后端') ? 25 : 12;
+// 稀缺度指数对应的标签颜色：高=红 中=橙 低=绿
+const scarcityType = (category) => {
+  const s = category.insight?.scarcity
+  if (s === '高') return 'danger'
+  if (s === '中') return 'warning'
+  return 'success'
 };
 
-// 动态生成建议
-const generateAgentDecision = (category) => {
-  const winRate = calculateWinRate(category);
-  if (winRate > 80) return "当前岗位与你画像高度契合，建议立即更新简历并投递。";
-  return "检测到核心技能缺口，建议优先完成右侧‘技能诊断’中的学习任务后再试。";
-};
+// 学习策略：返回该岗位的定向学习建议
+const generateAgentDecision = (category) =>
+  category.insight?.decision || '建议优先补齐该岗位的核心技能缺口，再对标投递。';
 
 const currentPage = ref(1)
 const pageDirection = ref('slide-left')
@@ -519,15 +577,13 @@ const skillCompleteness = ref(0)
 const competitivenessScore = ref(0)
 const dailyTasks = ref([])
 const skillGaps = ref([])
-const shortAgentAdvice = ref('正在获取 Agent 建议...')
 const tasksLoading = ref(true)
 
 // 从 resume_analyzer + learning_plan + dailyTasks 获取数据
 const fetchDashboardData = async () => {
   try {
-    const [resumeRes, planRes, tasksRes] = await Promise.all([
+    const [resumeRes, tasksRes] = await Promise.all([
       resumeApi.analyze({}),
-      learningPlanApi.generate({ plan_type: '长期' }),
       learningPlanApi.dailyTasks({ phase_index: 0 }),
     ])
     // 竞争力评分 & 技能完整度
@@ -561,14 +617,6 @@ const fetchDashboardData = async () => {
         }
       })
       if (gaps.length > 0) skillGaps.value = gaps.slice(0, 4)
-    }
-
-    // Agent 建议
-    const pData = planRes.data
-    if (pData.learning_plan?.agent_advice) {
-      shortAgentAdvice.value = pData.learning_plan.agent_advice
-    } else if (pData.learning_plan?.summary) {
-      shortAgentAdvice.value = pData.learning_plan.summary
     }
 
     // 每日待办（与 GrowthTracker 同源：learningPlanApi.dailyTasks）
@@ -887,16 +935,16 @@ const hotSearchTags = ref(['Java 工程师', '前端开发', '算法专家', '�
 
 // 职业分类
 const categories = ref([
-  { name: '前端开发 · 交互重构', icon: 'Monitor', tag: '职能增益', insight: { forecast: '18个月', deviation: '85%', decision: '建议强化 WebAssembly 实战，补齐高性能渲染画像。' } },
-  { name: '后端开发 · 架构设计', icon: 'Cpu', tag: '高需求', insight: { forecast: '36个月', deviation: '92%', decision: '画像匹配度高，建议关注分布式一致性协议的深度原理。' } },
-  { name: 'AI 算法 · 模型演进', icon: 'MagicStick', tag: '快迭代', insight: { forecast: '6个月', deviation: '70%', decision: '技术更迭极快，建议从模型调用转向垂直领域微调。' } },
-  { name: '产品经理 · 数字转型', icon: 'User', tag: '跨界型', insight: { forecast: '24个月', deviation: '78%', decision: '缺乏数据驱动决策背书，建议关联个人中心的能力证明。' } },
-  { name: '网络安全 · 攻防演练', icon: 'Lock', tag: '高门槛', insight: { forecast: '30个月', deviation: '65%', decision: 'AI 自动化攻击加剧，需提升零信任架构的规划能力。' } },
-  { name: '数据分析 · 决策支持', icon: 'PieChart', tag: '核心岗', insight: { forecast: '22个月', deviation: '88%', decision: '建议掌握自动化报表工具，将精力转向业务价值挖掘。' } },
-  { name: '移动开发 · 跨端框架', icon: 'Iphone', tag: '稳健型', insight: { forecast: '20个月', deviation: '80%', decision: '原生开发需求收缩，建议向 Flutter 或 HarmonyOS 演进。' } },
-  { name: '运维开发 · SRE', icon: 'Setting', tag: '硬核岗', insight: { forecast: '28个月', deviation: '75%', decision: 'AIOps 普及中，建议学习如何利用大模型优化告警预测。' } },
-  { name: 'UI/UX · 体验设计', icon: 'Brush', tag: '视觉系', insight: { forecast: '15个月', deviation: '82%', decision: '单纯绘图易被替代，需强化“交互逻辑与用户行为分析”。' } },
-  { name: '测试开发 · 自动化', icon: 'CircleCheck', tag: '品质岗', insight: { forecast: '24个月', deviation: '90%', decision: '测试用例生成已 AI 化，建议向全链路压测与安全扫描转型。' } }
+  { name: '前端开发 · 交互重构', icon: 'Monitor', tag: '职能增益', insight: { scarcity: '中', weakness: 'WebAssembly 实战', decision: '建议优先攻克”WebAssembly 实战”，该技能权重占 25% 且您当前掌握度仅 40%。' } },
+  { name: '后端开发 · 架构设计', icon: 'Cpu', tag: '高需求', insight: { scarcity: '高', weakness: '高并发锁机制', decision: '建议优先攻克”高并发锁机制”，该技能权重占 30% 且您当前掌握度仅 45%。' } },
+  { name: 'AI 算法 · 模型演进', icon: 'MagicStick', tag: '快迭代', insight: { scarcity: '高', weakness: '垂直领域模型微调', decision: '建议优先攻克”垂直领域模型微调”，该技能权重占 28% 且您当前掌握度仅 35%。' } },
+  { name: '产品经理 · 数字转型', icon: 'User', tag: '跨界型', insight: { scarcity: '中', weakness: '数据驱动决策方法', decision: '建议优先攻克”数据驱动决策方法”，该技能权重占 22% 且您当前掌握度仅 50%。' } },
+  { name: '网络安全 · 攻防演练', icon: 'Lock', tag: '高门槛', insight: { scarcity: '高', weakness: '零信任架构设计', decision: '建议优先攻克”零信任架构设计”，该技能权重占 26% 且您当前掌握度仅 38%。' } },
+  { name: '数据分析 · 决策支持', icon: 'PieChart', tag: '核心岗', insight: { scarcity: '中', weakness: '自动化报表与业务洞察', decision: '建议优先攻克”自动化报表与业务洞察”，该技能权重占 24% 且您当前掌握度仅 42%。' } },
+  { name: '移动开发 · 跨端框架', icon: 'Iphone', tag: '稳健型', insight: { scarcity: '低', weakness: '跨端框架（Flutter/HarmonyOS）', decision: '建议优先攻克”跨端框架（Flutter/HarmonyOS）”，该技能权重占 20% 且您当前掌握度仅 36%。' } },
+  { name: '运维开发 · SRE', icon: 'Setting', tag: '硬核岗', insight: { scarcity: '中', weakness: 'AIOps 告警预测建模', decision: '建议优先攻克”AIOps 告警预测建模”，该技能权重占 25% 且您当前掌握度仅 33%。' } },
+  { name: 'UI/UX · 体验设计', icon: 'Brush', tag: '视觉系', insight: { scarcity: '低', weakness: '交互逻辑与用户行为分析', decision: '建议优先攻克”交互逻辑与用户行为分析”，该技能权重占 21% 且您当前掌握度仅 44%。' } },
+  { name: '测试开发 · 自动化', icon: 'CircleCheck', tag: '品质岗', insight: { scarcity: '低', weakness: '全链路压测与安全扫描', decision: '建议优先攻克”全链路压测与安全扫描”，该技能权重占 23% 且您当前掌握度仅 41%。' } }
 ]);
 const currentCategory = ref(1)
 
@@ -920,10 +968,9 @@ const currentUser = ref({
 // 格式化岗位数据
 const formatJobData = (job) => ({
   jobTitle: job.title || job.jobTitle,
-  companyName: job.company || job.companyName,
-  salary: job.salary || '面议',
-  city: job.city || job.location,
-  matchRate: job.matchRate || 0,
+  overlapRate: job.overlapRate || job.matchRate || 0,
+  studyWeeks: job.studyWeeks || 0,
+  topWeaknesses: job.topWeaknesses || job.weaknesses || [],
   tags: job.tags || []
 })
 
@@ -1011,10 +1058,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  disposeRadarChart()
 })
 
 const handleResize = () => {
-  // 响应式处理
+  radarChartInstance?.resize()
 }
 </script>
 
@@ -1437,17 +1485,19 @@ const handleResize = () => {
     }
 
     .salary-forecast-card {
-      background: rgba(103, 194, 58, 0.08);
+      background: rgba(64, 158, 255, 0.06);
       border-radius: 8px;
       padding: 10px;
       .forecast-item {
         display: flex;
+        align-items: center;
         justify-content: space-between;
-        margin-bottom: 5px;
-        .f-label { color: #67c23a; font-size: 12px; font-weight: bold; }
-        .f-value { color: #67c23a; font-size: 16px; font-weight: bold; }
+        margin-bottom: 8px;
+        .f-label { color: #606266; font-size: 12px; font-weight: bold; }
       }
       .scarcity-info {
+        display: flex;
+        align-items: center;
         font-size: 11px;
         color: #909399;
       }
@@ -2012,48 +2062,7 @@ const handleResize = () => {
     }
   }
 
-  /* 内部内容排版 */
-  .el-card__body {
-    padding: 16px 20px !important;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
   }
-
-  /* 职位名称 */
-  .job-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: #1e293b;
-    margin-bottom: 6px;
-    letter-spacing: 0.3px;
-  }
-
-  /* 公司与薪资行 */
-  .job-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    .company-name {
-      font-size: 12px;
-      color: #94a3b8;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .salary-tag {
-      font-size: 14px;
-      font-weight: 700;
-      color: #5098f9;
-      background: rgba(80, 152, 249, 0.08);
-      padding: 2px 10px;
-      border-radius: 8px;
-    }
-  }
-}
 
 /* 🌟 优化轨道遮罩，让两端消失感更自然 */
 .infinite-scroll-wrapper {
@@ -2284,34 +2293,45 @@ const handleResize = () => {
 }
 
 /* 七维度网格 */
-.rp-radar-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  padding: 10px;
+/* 能力雷达图 */
+.rp-radar-chart {
   background: rgba(64, 158, 255, 0.04);
   border-radius: 10px;
+  padding: 4px;
 }
 
-.rp-radar-cell {
+.radar-chart {
+  width: 100%;
+  height: 150px;
+}
+
+/* 能力缺口词云 */
+.rp-gap-cloud {
+  margin-top: 4px;
+}
+
+.cloud-body {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 3px;
-  padding: 5px 0;
+  justify-content: center;
+  gap: 8px 14px;
+  min-height: 46px;
+  padding: 6px 4px 2px;
 }
 
-.rp-radar-val {
-  font-size: 15px;
-  font-weight: 700;
-  color: #c0c4cc;
+.cloud-tag {
+  font-weight: 600;
+  cursor: default;
+  transition: all 0.2s;
 
-  &.active { color: #409eff; }
-}
+  &:hover {
+    transform: translateY(-2px);
+  }
 
-.rp-radar-name {
-  font-size: 10px;
-  color: #909399;
+  &.danger { color: #f56c6c; }
+  &.warning { color: #e6a23c; }
+  &.info { color: #909399; }
 }
 
 /* 每日任务 */
@@ -2341,9 +2361,9 @@ const handleResize = () => {
 .rp-tasks-list {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 6px;
   flex: 1;
-  max-height: 180px;
   overflow-y: auto;
   padding-right: 2px;
 
@@ -2438,72 +2458,6 @@ const handleResize = () => {
   font-weight: 700;
   color: #303133;
   margin-bottom: 4px;
-}
-
-.rp-gap-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.rp-gap-item {
-  .rp-gap-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 5px;
-  }
-
-  .rp-gap-name {
-    font-size: 13px;
-    color: #303133;
-    font-weight: 500;
-  }
-
-  .rp-gap-tag {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 10px;
-
-    &.danger { background: #fef0f0; color: #f56c6c; }
-    &.warning { background: #fdf6ec; color: #e6a23c; }
-    &.info { background: #f4f4f5; color: #909399; }
-  }
-}
-
-/* Agent 建议 */
-.rp-advice {
-  margin-top: auto;
-  background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);
-  border: 1px solid #d1e9ff;
-  border-left: 4px solid #409eff;
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.rp-advice-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #409eff;
-}
-
-.rp-advice-icon {
-  animation: rpBreath 2s infinite ease-in-out;
-}
-
-@keyframes rpBreath {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.15); opacity: 0.7; }
-}
-
-.rp-advice-text {
-  font-size: 12px;
-  line-height: 1.7;
-  color: #606266;
-  margin: 6px 0 0;
 }
 
 /* 底部按钮 */

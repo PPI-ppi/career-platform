@@ -4,9 +4,9 @@
     <div class="action-bar">
       <h2 class="page-title">
         <el-icon><Briefcase /></el-icon>
-        人岗匹配
+        能力对标
       </h2>
-      <p class="page-desc">职能助手融合多维数据，为你精准匹配最佳岗位</p>
+      <p class="page-desc">AI 学习导师融合多维数据，为你精准对标最佳岗位</p>
     </div>
 
     <div class="job-match-content">
@@ -14,9 +14,9 @@
       <transition name="loading-fade">
         <div v-if="loading" class="loading-section">
         <InteractiveLoading
-          title="匹配分析中"
-          description="正在融合多维数据，为你精准匹配最佳岗位"
-          statusText="职能助手匹配引擎运行中"
+          title="对标分析中"
+          description="正在融合多维数据，为你精准对标最佳岗位"
+          statusText="AI 学习导师对标引擎运行中"
           :steps="loadingSteps"
           :currentStep="currentStep"
           :progress="progressPercent"
@@ -32,20 +32,20 @@
           <div class="empty-icon">
             <el-icon :size="64"><Briefcase /></el-icon>
           </div>
-          <h3>暂无匹配数据</h3>
-          <p>请先在「个人信息」中完成对话分析，生成个人画像后系统将自动进行匹配</p>
+          <h3>暂无对标数据</h3>
+          <p>请先在「个人信息」中完成对话分析，生成个人画像后系统将自动进行对标</p>
         </div>
       </div>
 
-      <!-- 匹配结果 -->
+      <!-- 对标结果 -->
       <template v-if="!loading && hasData">
         <!-- 总览区域 -->
         <div class="overview-row">
-          <!-- 左侧：最佳匹配雷达图 -->
+          <!-- 左侧：最佳对标雷达图 -->
           <div class="glass-card radar-card accent-blue">
             <h3 class="card-title">
               <el-icon><DataAnalysis /></el-icon>
-              {{ selectedJob.job_title || '目标岗位' }} - 能力画像
+              {{ selectedJob.job_title || '我的学习目标' }} - 能力画像
             </h3>
             <div class="target-job-badge">
               <span class="company">{{ selectedJob.company }}</span>
@@ -62,11 +62,11 @@
             </div>
           </div>
 
-          <!-- 右侧：匹配列表 -->
+          <!-- 右侧：对标列表 -->
           <div class="glass-card list-card accent-green">
             <h3 class="card-title">
               <el-icon><List /></el-icon>
-              匹配结果 ({{ rankedResults.length }} 个岗位)
+              对标结果 ({{ rankedResults.length }} 个岗位)
             </h3>
             <div class="job-list">
               <div
@@ -124,7 +124,7 @@
           <div class="glass-card summary-card accent-orange">
             <h3 class="card-title">
               <el-icon><ChatDotRound /></el-icon>
-              匹配简评
+              对标简评
             </h3>
             <p class="summary-text">{{ selectedJob.summary || '暂无简评' }}</p>
           </div>
@@ -133,7 +133,7 @@
           <div class="glass-card dimensions-card">
             <h3 class="card-title">
               <el-icon><Histogram /></el-icon>
-              七维度匹配详情
+              七维度对标详情
             </h3>
             <img src="@/assets/3D grow.png" class="dim-decoration" />
             <div class="dimensions-grid">
@@ -192,7 +192,7 @@
               :disabled="!!lockingKey && lockingKey !== getJobKey(selectedJob)"
               @click="lockJob(selectedIndex)"
             >
-              {{ isJobLocked(selectedJob) ? '取消锁定当前岗位' : '锁定为目标岗位' }}
+              {{ isJobLocked(selectedJob) ? '取消锁定当前岗位' : '锁定为我的学习目标' }}
             </el-button>
             <el-button
               v-if="selectedJob.job_id"
@@ -257,7 +257,7 @@ const selectedIndex = ref(0)
 const radarRef = ref(null)
 let radarInstance = null
 
-const loadingSteps = ['加载用户画像', 'RAG 检索匹配岗位', 'Neo4j 知识图谱增强', 'LLM 多维度评分', '生成匹配报告']
+const loadingSteps = ['加载用户画像', 'RAG 检索对标岗位', 'Neo4j 知识图谱增强', 'LLM 多维度评分', '生成对标报告']
 const currentStep = ref(0)
 const progressPercent = ref(0)
 let stepTimer = null
@@ -277,13 +277,13 @@ const dimensionList = computed(() => {
   }))
 })
 
-// ==================== 匹配逻辑 ====================
+// ==================== 对标逻辑 ====================
 const startMatch = async () => {
   loading.value = true
   rankedResults.value = []
   selectedIndex.value = 0
 
-  // 每次匹配自动清除旧锁定
+  // 每次对标自动清除旧锁定
   lockedJobKey.value = ''
   hasMatchData.value = false
   parentSelectedJob.value = null
@@ -320,7 +320,7 @@ const startMatch = async () => {
 
     // Guard: no profile data at all → don't call API
     if (!profilePayload.radar_data) {
-      ElMessage.warning('请先在「职能助手」中完成对话分析，生成个人画像后再进行匹配')
+      ElMessage.warning('请先在「AI 学习导师」中完成对话分析，生成个人画像后再进行对标')
       return
     }
 
@@ -335,7 +335,7 @@ const startMatch = async () => {
 
     const results = payload.ranked_results || payload.match_results || payload.matches || []
     if (results.length === 0) {
-      ElMessage.warning(payload.error || '未找到匹配的岗位，请先完善简历信息')
+      ElMessage.warning(payload.error || '未找到对标的岗位，请先完善简历信息')
       return
     }
 
@@ -344,7 +344,7 @@ const startMatch = async () => {
     currentStep.value = loadingSteps.length - 1
     progressPercent.value = 100
     saveToCache(results, 0, hashProfile(currentRadarData.value))
-    ElMessage.success(`匹配完成，共找到 ${results.length} 个岗位`)
+    ElMessage.success(`对标完成，共找到 ${results.length} 个岗位`)
 
     await nextTick()
     requestAnimationFrame(() => {
@@ -352,7 +352,7 @@ const startMatch = async () => {
     })
   } catch (err) {
     console.error('[JobMatch] match failed:', err)
-    ElMessage.error('匹配请求失败，请稍后重试')
+    ElMessage.error('对标请求失败，请稍后重试')
   } finally {
     clearInterval(stepTimer)
     clearInterval(progressTimer)
@@ -404,7 +404,7 @@ const lockJob = async (idx) => {
     hasMatchData.value = true
     parentSelectedJob.value = job
     sessionStorage.removeItem('growth_tracker_cache')
-    ElMessage.success(`已锁定「${job.job_title || '目标岗位'}」`)
+    ElMessage.success(`已锁定「${job.job_title || '我的学习目标'}」`)
   } catch (err) {
     console.error('[JobMatch] lock job failed:', err)
     ElMessage.error(isJobLocked(job) ? '取消锁定失败，请重试' : '锁定失败，请重试')
@@ -513,7 +513,7 @@ const updateRadarChart = () => {
       type: 'radar',
       data: [{
         value: values,
-        name: selectedJob.value.job_title || '匹配度',
+        name: selectedJob.value.job_title || '能力达成度',
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(80,152,249,0.3)' },
@@ -541,11 +541,11 @@ const goToJobDetail = () => {
 
 // ==================== 辅助函数 ====================
 const getScoreLevel = (score) => {
-  if (score >= 90) return '卓越匹配'
-  if (score >= 80) return '高度匹配'
-  if (score >= 70) return '良好匹配'
-  if (score >= 60) return '基本匹配'
-  return '匹配度较低'
+  if (score >= 90) return '卓越对标'
+  if (score >= 80) return '高度对标'
+  if (score >= 70) return '良好对标'
+  if (score >= 60) return '基本对标'
+  return '能力达成度较低'
 }
 
 const getScoreLevelClass = (score) => {

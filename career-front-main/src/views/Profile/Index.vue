@@ -11,25 +11,11 @@
       </el-menu-item>
       <el-menu-item index="match">
         <el-icon><Connection /></el-icon>
-        <span>人岗匹配</span>
-      </el-menu-item>
-      <el-tooltip
-        :disabled="canAccessGrowth"
-        content="请先完善个人信息并完成人岗匹配后再使用"
-        placement="right"
-      >
-        <el-menu-item index="growth" :disabled="!canAccessGrowth" :class="{ 'is-disabled-custom': !canAccessGrowth }">
-          <el-icon><TrendCharts /></el-icon>
-          <span>成长追踪中心</span>
-        </el-menu-item>
-      </el-tooltip>
-      <el-menu-item index="report-export">
-        <el-icon><DocumentCopy /></el-icon>
-        <span>报告优化与导出</span>
+        <span>能力对标</span>
       </el-menu-item>
       <el-menu-item index="favorite" class="menu-item-bottom">
       <el-icon><Star /></el-icon>
-      <span>目标岗位</span>
+      <span>我的学习目标</span>
     </el-menu-item>
     </el-menu>
     </aside>
@@ -47,7 +33,7 @@
                       <span class="pulse-dot"></span>
                     </div>
                     <div class="header-text">
-                      <h3 class="chat-title">职能助手</h3>
+                      <h3 class="chat-title">AI 学习导师</h3>
                     </div>
                   </div>
                     <div class="header-right">
@@ -163,7 +149,7 @@
                     </div>
 
                     <p v-else class="empty-preview-tip">
-                      请在左侧对话中完善个人信息，职能助手将实时生成能力画像
+                      请在左侧对话中完善个人信息，AI 学习导师将实时生成能力画像
                     </p>
                   </div>
                 </div>
@@ -190,17 +176,6 @@
 
         <div v-else-if="activeTab === 'match'" class="sub-page">
           <JobMatch />
-        </div>
-        <div v-else-if="activeTab === 'growth' && canAccessGrowth" class="sub-page">
-          <GrowthTracker :key="selectedJob?.job_title || 'default'" />
-        </div>
-        <div v-else-if="activeTab === 'growth' && !canAccessGrowth" class="sub-page">
-          <div class="empty-state">
-            <el-empty description="请先完成人岗匹配后再使用成长追踪中心" />
-          </div>
-        </div>
-        <div v-else-if="activeTab === 'report-export'" class="sub-page">
-          <PolishAndExport />
         </div>
         <div v-else-if="activeTab === 'favorite'" class="sub-page">
           <FavoriteJobs />
@@ -232,8 +207,6 @@ import * as mammoth from 'mammoth'
 
 // 导入你的子组件
 import PersonalInfo from './PersonalInfo.vue'
-import GrowthTracker from './GrowthTracker.vue'
-import PolishAndExport from './PolishAndExport.vue'
 import FavoriteJobs from './FavoriteJobs.vue'
 import JobMatch from './JobMatch.vue'
 import RadarChart from '../../components/RadarChart.vue'
@@ -340,19 +313,12 @@ const userInfo = ref(_moduleState.userInfo)
 // isInfoFilled 不持久化，切回来时显示聊天界面
 const isInfoFilled = ref(false)
 
-// 匹配数据状态 — 控制成长追踪中心是否可用
+// 向子页面（能力对标）提供已锁定学习目标状态
 const hasMatchData = ref(false)
 provide('hasMatchData', hasMatchData)
 
-// 当前锁定的岗位 — 成长追踪中心根据此岗位刷新数据
 const selectedJob = ref(null)
 provide('selectedJob', selectedJob)
-
-// 是否可访问成长追踪中心：必须有个人信息 + 已匹配岗位
-const canAccessGrowth = computed(() => {
-  const hasProfile = currentRadarData.value && currentRadarData.value.some(v => v > 0)
-  return hasProfile && hasMatchData.value
-})
 
 // --- 聊天状态（使用模块级数据，SPA 内切换保留） ---
 const currentStepIndex = ref(_moduleState.currentStepIndex)
@@ -360,7 +326,7 @@ const chatMessages = ref(_moduleState.chatMessages)
 const chatGreeted = ref(_moduleState.chatGreeted)
 
 // AI 初始问候 — 固定开场白
-const GREETING_TEXT = `你好！我是你的职能助手 👋
+const GREETING_TEXT = `你好！我是你的AI 学习导师 👋
 
 我可以帮你分析职业画像、评估岗位匹配度。请告诉我：
 
@@ -428,9 +394,7 @@ onMounted(async () => {
 // 路由变化时同步 tab（解决从岗位详情返回时 tab 重置的问题）
 watch(() => route.path, (path) => {
   if (path.includes('/profile/match')) activeTab.value = 'match'
-  else if (path.includes('/profile/growth')) activeTab.value = 'growth'
   else if (path.includes('/profile/favorites')) activeTab.value = 'favorite'
-  else if (path.includes('/profile/report-export')) activeTab.value = 'report-export'
 })
 
 // 组件销毁前同步状态到模块级变量
@@ -443,14 +407,9 @@ onUnmounted(() => {
 
 // 🌟 修复核心：确保菜单选择逻辑能干净地切换 activeTab
 const handleMenuSelect = (index) => {
-  // 未完成人岗匹配或无个人信息时，禁止切换到成长追踪中心
-  if (index === 'growth' && !canAccessGrowth.value) {
-    ElMessage.warning('请先完善个人信息并完成人岗匹配后再使用成长追踪中心')
-    return
-  }
   activeTab.value = index
   // 同步 URL，使浏览器后退能回到正确的 tab
-  const pathMap = { info: '/profile/info', match: '/profile/match', growth: '/profile/growth', favorite: '/profile/favorites', 'report-export': '/profile/report-export' }
+  const pathMap = { info: '/profile/info', match: '/profile/match', favorite: '/profile/favorites' }
   const target = pathMap[index]
   if (target && route.path !== target) router.replace(target)
 }
@@ -570,7 +529,7 @@ const handleSend = async () => {
     }
   } catch (err) {
     console.error('[Coach] Send failed:', err)
-    aiMsg.content = aiMsg.content || '抱歉，职能助手暂时不可用，请稍后再试。'
+    aiMsg.content = aiMsg.content || '抱歉，AI 学习导师暂时不可用，请稍后再试。'
   } finally {
     loading.value = false
     isStreaming.value = false

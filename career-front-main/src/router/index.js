@@ -33,21 +33,21 @@ const routes = [
         component: () => import('@/views/Profile/JobMatch.vue')
       },
       {
-        path: 'growth',
-        name: 'GrowthTracker',
-        component: () => import('@/views/Profile/GrowthTracker.vue')
-      },
-      {
         path: 'favorites',
         name: 'FavoriteJobs',
         component: () => import('@/views/Profile/FavoriteJobs.vue')
-      },
-     {
-        path: 'report-export',
-        name: 'PolishAndExport',
-        component: () => import('@/views/Profile/PolishAndExport.vue')
       }
     ]
+  },
+  {
+    path: '/training',
+    name: 'Training',
+    component: () => import('@/views/Profile/GrowthTracker.vue')
+  },
+  {
+    path: '/feedback',
+    name: 'Feedback',
+    component: () => import('@/views/Profile/PolishAndExport.vue')
   }
 ];
 

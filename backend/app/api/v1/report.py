@@ -30,12 +30,12 @@ async def generate_report(user: dict = Depends(get_current_user)):
     if error == "NO_PROFILE":
         raise HTTPException(
             400,
-            "暂无个人画像数据，请先在「个人中心」的职能助手中完成对话分析，生成个人画像后再来生成报告。"
+            "暂无个人画像数据，请先在「个人中心」的 AI 学习导师中完成对话分析，生成个人画像后再来生成报告。"
         )
     if error == "INSUFFICIENT_DATA":
         raise HTTPException(
             400,
-            "数据不足，请先完成「人岗匹配」或「职业规划」后再来生成报告。"
+            "数据不足，请先完成「能力对标」或「学习规划」后再来生成报告。"
         )
 
     return {"success": True, "report_text": data.get("report_text", "")}

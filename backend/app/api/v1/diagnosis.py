@@ -36,7 +36,7 @@ async def generate_diagnosis(req: DiagnosisRequest, user: dict = Depends(get_cur
     dim_text = "\n".join(dim_summary)
 
     SYSTEM_PROMPT = (
-        "你是一位资深的职业分析师。请根据用户的七维能力画像数据，撰写一份深度诊断报告。\n"
+        "你是一位学习发展顾问（职业教育与就业辅导方向）。请根据用户的七维能力画像数据，撰写一份学习诊断与提升建议报告。\n"
         "\n"
         "【输出格式要求】\n"
         "- 纯文本，不要任何markdown符号（不要#、*、-、>等）\n"
@@ -57,7 +57,12 @@ async def generate_diagnosis(req: DiagnosisRequest, user: dict = Depends(get_cur
         "\n"
         "第三段：综合评价与展望\n"
         "- 给出中肯的整体评价\n"
-        "- 用积极但务实的语气总结发展前景"
+        "- 用积极但务实的语气总结发展前景\n"
+        "\n"
+        "【重要边界】\n"
+        "- 你是学习发展顾问，不是学校教师或教育机构。本报告仅作为学习辅助参考，\n"
+        "  不构成学校正式评价、成绩或录取/录用结论，不能替代教师、学校或专业机构的判断。\n"
+        "- 请在报告结尾用一句温和提示说明以上边界。"
     )
 
     USER_PROMPT = (
