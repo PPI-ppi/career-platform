@@ -60,10 +60,10 @@
 <div class="category-list-container"> <div class="scrolling-wrapper">
     <div class="scroll-content" v-for="n in 2" :key="n">
       <div
-        v-for="category in categories"
-        :key="category.id + '-' + n"
-        :class="['category-item', { active: currentCategory === category.id }]"
-        @click="selectCategory(category.id)"
+        v-for="(category, idx) in categories"
+        :key="idx + '-' + n"
+        class="category-item"
+        @click="selectCategory(idx)"
       >
         <el-popover
           placement="right"
@@ -77,10 +77,12 @@
               <el-icon class="category-icon">
                 <component :is="category.icon" />
               </el-icon>
-              <span class="category-name">{{ category.name }}</span>
-              <el-tag v-if="category.tag" size="small" effect="plain" class="category-tag">
-                {{ category.tag }}
-              </el-tag>
+              <div class="category-text">
+                <span class="category-name">{{ category.name }}</span>
+                <el-tag v-if="category.tag" size="small" effect="plain" class="category-tag">
+                  {{ category.tag }}
+                </el-tag>
+              </div>
               <el-icon class="category-arrow"><ArrowRight /></el-icon>
             </div>
           </template>
@@ -172,7 +174,7 @@
 
       <!-- 右列：个人画像面板 -->
       <section class="right-panel">
-        <el-card class="panel-card roadmap-focus-card" @mouseenter="stopAutoPlay" @mouseleave="startAutoPlay">
+        <el-card class="panel-card roadmap-focus-card">
           <!-- 顶部状态栏 -->
           <div class="rp-status-bar">
             <div class="pulse-dot"></div>
@@ -202,10 +204,10 @@
             </el-button>
           </div>
 
-          <!-- 有数据：画像概览（雷达图 + 缺口词云）/ 任务预览 -->
+          <!-- 有数据：画像概览 -->
           <div v-else class="rp-content">
-            <!-- 第一页：画像概览 -->
-            <div :class="['rp-page rp-page-front', { 'is-back': !isFrontPage }]">
+            <!-- 画像概览 -->
+            <div class="rp-page rp-page-front">
               <!-- 用户头像行 + 综合评分 -->
               <div class="rp-user-row">
                 <el-avatar :size="36" :src="auth.user?.avatar || ''" />
@@ -242,30 +244,6 @@
                 </div>
               </div>
             </div>
-
-            <!-- 第二页：任务预览 + Agent 建议 -->
-            <div :class="['rp-page rp-page-back', { 'is-front': !isFrontPage }]">
-              <div class="rp-tasks">
-                <div class="rp-tasks-header">
-                  <el-icon><Calendar /></el-icon>
-                  <span>任务预览</span>
-                  <el-tag size="small" type="info" effect="plain" class="rp-tasks-tag">Agent 推荐</el-tag>
-                </div>
-                <div v-if="tasksLoading" class="rp-tasks-loading">
-                  <div v-for="i in 3" :key="i" class="rp-task-skeleton">
-                    <div class="skel-check"></div>
-                    <div class="skel-line" :style="{ width: [85, 65, 75][i - 1] + '%' }"></div>
-                  </div>
-                </div>
-                <div v-else class="rp-tasks-list">
-                  <div v-for="task in dailyTasks" :key="task.id" class="rp-task-item">
-                    <el-checkbox v-model="task.completed" />
-                    <span :class="['rp-task-text', { done: task.completed }]">{{ task.text }}</span>
-                  </div>
-                  <div v-if="dailyTasks.length === 0" class="rp-tasks-empty">暂无待办任务</div>
-                </div>
-              </div>
-            </div>
           </div>
 
           <!-- 底部入口 -->
@@ -276,97 +254,94 @@
       </section>
     </main>
 
-    <!-- 3. 底部区域：热门岗位推荐 -->
-<section class="hot-jobs-section">
-  
-<div class="data-particle-field" ref="particleContainer">
-  <canvas ref="bgCanvas" class="bg-canvas"></canvas>
-  
-  <svg class="connection-lines" id="connection-lines">
-    <defs>
-      <linearGradient id="line-gradient">
-        <stop offset="0%" stop-color="#409EFF" />
-        <stop offset="100%" stop-color="#b18aff" />
-      </linearGradient>
-    </defs>
-    <circle class="orbit-ring" cx="50%" cy="50%" fill="none" r="240" stroke="rgba(177, 138, 255, 0.15)" stroke-dasharray="8 8" stroke-width="1"></circle>
-    <circle class="orbit-ring" cx="50%" cy="50%" fill="none" r="150" stroke="rgba(0, 219, 230, 0.1)" stroke-width="2"></circle>
-    <g ref="dynamicLines"></g>
-  </svg>
+    <!-- 3. 底部区域：数据粒子放射引力场 -->
+    <section class="particle-section">
+      <div class="data-particle-field" ref="particleContainer">
+        <canvas ref="bgCanvas" class="bg-canvas"></canvas>
 
-  <div class="center-text-block center-node" ref="centerNode">
-    <div class="small-title">AURORA ENGINE 2.0</div>
-    <div class="big-data">基于 <span class="highlight">10,000+</span> 职业能力基准模型</div>
-    <div class="ai-analysis">复杂网络分析</div>
-  </div>
+        <svg class="connection-lines" id="connection-lines">
+          <defs>
+            <linearGradient id="line-gradient">
+              <stop offset="0%" stop-color="#409EFF" />
+              <stop offset="100%" stop-color="#b18aff" />
+            </linearGradient>
+          </defs>
+          <circle class="orbit-ring" cx="50%" cy="50%" fill="none" r="240" stroke="rgba(177, 138, 255, 0.15)" stroke-dasharray="8 8" stroke-width="1"></circle>
+          <circle class="orbit-ring" cx="50%" cy="50%" fill="none" r="150" stroke="rgba(0, 219, 230, 0.1)" stroke-width="2"></circle>
+          <g ref="dynamicLines"></g>
+        </svg>
 
-  <div class="post-sphere data-node sphere-1" :ref="setNodeRef"><span class="label">前端开发</span></div>
-  <div class="post-sphere data-node sphere-2" :ref="setNodeRef"><span class="label">产品经理</span></div>
-  <div class="post-sphere data-node sphere-3" :ref="setNodeRef"><span class="label">AI 算法</span></div>
-  <div class="post-sphere data-node sphere-4" :ref="setNodeRef"><span class="label">网络安全</span></div>
-  <div class="post-sphere data-node sphere-5" :ref="setNodeRef"><span class="label">后端开发</span></div>
-  <div class="post-sphere data-node sphere-6" :ref="setNodeRef"><span class="label">数据分析</span></div>
-  <div class="post-sphere data-node sphere-7" :ref="setNodeRef"><span class="label">UI/UX</span></div>
-  <div class="post-sphere data-node sphere-8" :ref="setNodeRef"><span class="label">运维 SRE</span></div>
-  <div class="post-sphere data-node sphere-10" :ref="setNodeRef"><span class="label">全栈开发</span></div>
-  <div class="post-sphere data-node sphere-11" :ref="setNodeRef"><span class="label">移动端</span></div>
-  <div class="post-sphere data-node sphere-12" :ref="setNodeRef"><span class="label">云计算</span></div>
-  <div class="post-sphere data-node sphere-13" :ref="setNodeRef"><span class="label">架构师</span></div>
-  <div class="post-sphere data-node sphere-14" :ref="setNodeRef"><span class="label">交互设计</span></div>
-  <div class="post-sphere data-node sphere-15" :ref="setNodeRef"><span class="label">游戏开发</span></div>
-  <div class="post-sphere data-node sphere-16" :ref="setNodeRef"><span class="label">物联网 IOT</span></div>
-</div>
-
-
-<div class="jobs-list-container">
-  <div class="section-header">
-    <h2 class="section-title">🔥 高匹配度岗位推荐</h2>
-  </div>
-
-  <div class="infinite-scroll-wrapper">
-    
-    <div class="scroll-row row-left">
-      <div class="scroll-track">
-        <div class="scroll-group">
-          <JobCard
-            v-for="job in hotJobs"
-            :key="'r1-' + job.id"
-            :job="formatJobData(job)"
-          />
+        <div class="center-text-block center-node" ref="centerNode">
+          <div class="small-title">AURORA ENGINE 2.0</div>
+          <div class="big-data">基于 <span class="highlight">10,000+</span> 职业能力基准模型</div>
+          <div class="ai-analysis">复杂网络分析</div>
         </div>
-        <div class="scroll-group" aria-hidden="true">
-          <JobCard
-            v-for="job in hotJobs"
-            :key="'r1-copy-' + job.id"
-            :job="formatJobData(job)"
-          />
+
+        <div class="post-sphere data-node sphere-1" :ref="setNodeRef"><span class="label">前端开发</span></div>
+        <div class="post-sphere data-node sphere-2" :ref="setNodeRef"><span class="label">产品经理</span></div>
+        <div class="post-sphere data-node sphere-3" :ref="setNodeRef"><span class="label">AI 算法</span></div>
+        <div class="post-sphere data-node sphere-4" :ref="setNodeRef"><span class="label">网络安全</span></div>
+        <div class="post-sphere data-node sphere-5" :ref="setNodeRef"><span class="label">后端开发</span></div>
+        <div class="post-sphere data-node sphere-6" :ref="setNodeRef"><span class="label">数据分析</span></div>
+        <div class="post-sphere data-node sphere-7" :ref="setNodeRef"><span class="label">UI/UX</span></div>
+        <div class="post-sphere data-node sphere-8" :ref="setNodeRef"><span class="label">运维 SRE</span></div>
+        <div class="post-sphere data-node sphere-10" :ref="setNodeRef"><span class="label">全栈开发</span></div>
+        <div class="post-sphere data-node sphere-11" :ref="setNodeRef"><span class="label">移动端</span></div>
+        <div class="post-sphere data-node sphere-12" :ref="setNodeRef"><span class="label">云计算</span></div>
+        <div class="post-sphere data-node sphere-13" :ref="setNodeRef"><span class="label">架构师</span></div>
+        <div class="post-sphere data-node sphere-14" :ref="setNodeRef"><span class="label">交互设计</span></div>
+        <div class="post-sphere data-node sphere-15" :ref="setNodeRef"><span class="label">游戏开发</span></div>
+        <div class="post-sphere data-node sphere-16" :ref="setNodeRef"><span class="label">物联网 IOT</span></div>
+      </div>
+    </section>
+
+    <!-- 3. 底部区域：实训任务预览（横向展开画廊） -->
+    <section class="task-gallery-section">
+      <div class="gallery-header">
+        <h2 class="section-title">实训任务预览</h2>
+        <span class="gallery-sub">与个性化实训台同步 · 悬停展开任务卡片</span>
+      </div>
+
+      <div class="accordion-gallery" ref="accordionRef" @mouseleave="onAccordionLeave">
+        <div
+          v-for="(task, idx) in coverflowTasks"
+          :key="task.id"
+          class="accordion-card"
+          :class="{ active: activeAccordionIdx === idx }"
+          :ref="(el) => { if (el) accordionCardRefs[idx] = el }"
+          @mouseenter="onAccordionHover(idx)"
+          @click="onAccordionCardClick(task, idx)"
+        >
+          <div class="accordion-card__inner">
+            <div class="accordion-card__bg" :style="{ background: accordionGradients[idx % accordionGradients.length] }">
+              <div v-if="task.status" class="accordion-card__progress" :class="statusClass(task.status)">
+                <span class="progress-dot"></span>{{ task.status }}
+              </div>
+              <img class="accordion-card__thumb" :src="taskThumb" alt="" draggable="false" />
+              <div class="accordion-card__overlay"></div>
+              <div class="accordion-card__content">
+                <div class="accordion-card__badge">T{{ idx + 1 }}</div>
+                <div class="accordion-card__title">{{ task.title }}</div>
+                <div v-if="task.description" class="accordion-card__desc">{{ task.description }}</div>
+                <div class="accordion-card__steps">
+                  <div
+                    v-for="(step, si) in (task.steps || defaultSteps)"
+                    :key="si"
+                    class="accordion-card__step"
+                  >
+                    <span class="step-dot"></span>
+                    <span>{{ step }}</span>
+                  </div>
+                </div>
+                <div v-if="task.aiComment" class="accordion-card__comment">
+                  <span class="comment-label">AI 简评</span>{{ task.aiComment }}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-
-    <div class="scroll-row row-right">
-      <div class="scroll-track">
-        <div class="scroll-group">
-          <JobCard
-            v-for="job in [...hotJobs].reverse()"
-            :key="'r2-' + job.id"
-            :job="formatJobData(job)"
-          />
-        </div>
-        <div class="scroll-group" aria-hidden="true">
-          <JobCard
-            v-for="job in [...hotJobs].reverse()"
-            :key="'r2-copy-' + job.id"
-            :job="formatJobData(job)"
-          />
-        </div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-</section>
+    </section>
 
     <!-- 底部信息 -->
     <footer class="home-footer">
@@ -392,26 +367,20 @@ import { useRouter } from 'vue-router'
 import {
   Search,
   User,
-  Lock,
   Document,
   Grid,
-  ArrowRight,
-  ChatDotRound,
-  ChatLineRound,
-  Service
+  ArrowRight
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { jobsApi } from '@/api/jobs'
+import gsap from 'gsap'
+import taskThumb from '@/assets/retouch_2026080621010945.png'
 import { resumeApi } from '@/api/resume'
-import { learningPlanApi } from '@/api/learningPlan'
+import { trainingApi } from '@/api/training'
 import { currentRadarData } from '@/views/Profile/profileState'
 import { useAuthStore } from '@/stores/auth'
-import JobCard from '@/components/JobCard.vue'
-import gsap from 'gsap'
 
 const auth = useAuthStore()
-const hotJobs = ref([])
 
 const RADAR_DIMS = ['专业技能', '创新能力', '学习能力', '实习能力', '抗压能力', '沟通能力', '证书']
 const RADAR_WEIGHTS = [0.18, 0.15, 0.18, 0.16, 0.10, 0.10, 0.13]
@@ -428,47 +397,6 @@ const overallScore = computed(() => {
   })
   return totalWeight > 0 ? Math.round(totalScore / totalWeight) : 0
 })
-
-const loadHotJobs = async () => {
-  try {
-    const { data } = await jobsApi.list({ page_size: 10 })
-    const overlapRates = [96, 93, 91, 88, 86, 84, 81, 78, 75, 72]
-    const weaknessPool = [
-      ['WebAssembly', '性能优化'],
-      ['高并发锁机制', '分布式事务'],
-      ['模型微调', 'RAG 工程'],
-      ['数据驱动决策', 'A/B 实验'],
-      ['零信任架构', '漏洞挖掘'],
-      ['自动化报表', '数据建模'],
-      ['跨端框架', '原生适配'],
-      ['AIOps', '告警预测'],
-      ['用户行为分析', '动效设计'],
-      ['全链路压测', '安全扫描'],
-    ]
-    const studyWeeksPool = [8, 10, 6, 12, 9, 7, 11, 8, 10, 6]
-    hotJobs.value = (data.jobs || []).map((item, index) => ({
-      id: item.id,
-      jobTitle: item.job_title || item.title,
-      overlapRate: item.match_rate || overlapRates[index] || (70 + Math.floor(Math.random() * 20)),
-      studyWeeks: studyWeeksPool[index] || 8,
-      topWeaknesses: weaknessPool[index] || ['核心技能', '经验积累'],
-      tags: item.industry ? item.industry.split(',').slice(0, 3) : [],
-      raw: { industry: item.industry || '' },
-    }))
-  } catch {
-    // keep empty
-  }
-}
-
-const userData = computed(() => auth.user || { name: 'user', skills: userDataFallback.skills })
-
-const userDataFallback = {
-  name: 'user',
-  skills: {
-    certificate: 70, digital: 75, teamwork: 80, learning: 90,
-    professional: 85, internship: 65, communication: 80, pressure: 75, innovation: 85,
-  },
-}
 
 const hasProfile = ref(false)
 const profileLoading = ref(true)
@@ -569,23 +497,14 @@ const scarcityType = (category) => {
 const generateAgentDecision = (category) =>
   category.insight?.decision || '建议优先补齐该岗位的核心技能缺口，再对标投递。';
 
-const currentPage = ref(1)
-const pageDirection = ref('slide-left')
-let autoPlayTimer = null
-
 const skillCompleteness = ref(0)
 const competitivenessScore = ref(0)
-const dailyTasks = ref([])
 const skillGaps = ref([])
-const tasksLoading = ref(true)
 
-// 从 resume_analyzer + learning_plan + dailyTasks 获取数据
+// 从 resume_analyzer 获取数据
 const fetchDashboardData = async () => {
   try {
-    const [resumeRes, tasksRes] = await Promise.all([
-      resumeApi.analyze({}),
-      learningPlanApi.dailyTasks({ phase_index: 0 }),
-    ])
+    const resumeRes = await resumeApi.analyze({})
     // 竞争力评分 & 技能完整度
     const rData = resumeRes.data
     if (rData.competitiveness) {
@@ -619,47 +538,253 @@ const fetchDashboardData = async () => {
       if (gaps.length > 0) skillGaps.value = gaps.slice(0, 4)
     }
 
-    // 每日待办（与 GrowthTracker 同源：learningPlanApi.dailyTasks）
-    const tData = tasksRes.data
-    if (tData.daily_tasks && tData.daily_tasks.length > 0) {
-      dailyTasks.value = tData.daily_tasks.slice(0, 6).map((t, i) => ({
-        id: t.id || i + 1,
-        text: t.content || t.title || t.task || `任务 ${i + 1}`,
-        completed: false,
-      }))
-    }
   } catch {
     // 静默降级，使用默认值
-  } finally {
-    tasksLoading.value = false
   }
 }
 
-// 🌟 新增：层级切换逻辑
-const isFrontPage = ref(true)
-let stackTimer = null
-
-const startAutoPlay = () => {
-  if (stackTimer) clearInterval(stackTimer)
-  stackTimer = setInterval(() => {
-    isFrontPage.value = !isFrontPage.value
-  }, 5000) // 每 5 秒切换一次前后位置
-}
-
-const stopAutoPlay = () => {
-  if (stackTimer) clearInterval(stackTimer)
-}
-
 onMounted(() => {
-  startAutoPlay()
+  fetchCoverflowTasks()
 })
 
 onUnmounted(() => {
-  stopAutoPlay()
+  if (accordionTween) accordionTween.kill()
 })
 
 
 
+onMounted(() => {
+  startTyping();
+})
+
+const router = useRouter()
+
+
+const fullText = "职途虽远，智能无界；跨越方寸，预见无限"
+const typedText = ref("")
+
+// 修改你的 startTyping 函数
+let typingTimer = null; // 在函数外部定义变量
+
+const startTyping = () => {
+  // 🌟 新增：如果已经在打字了，先停止之前的，防止重复
+  if (typingTimer) clearInterval(typingTimer);
+  typedText.value = ''; 
+  
+  let i = 0;
+  typingTimer = setInterval(() => {
+    typedText.value += fullText[i];
+    i++;
+    if (i >= fullText.length) {
+      clearInterval(typingTimer);
+      typingTimer = null;
+    }
+  }, 100);
+};
+
+// ========== 实训任务预览 · 横向展开画廊（GSAP 驱动）==========
+const defaultSteps = ['搭建环境', '编写脚本', '压测验证']
+const coverflowTasks = ref([])
+const coverflowLoading = ref(false)
+
+const accordionRef = ref(null)
+const accordionCardRefs = ref([])
+const activeAccordionIdx = ref(0) // 默认选中第一张
+
+// 卡片背景渐变（半透明淡色系，配合毛玻璃）
+const accordionGradients = [
+  'linear-gradient(135deg, rgba(102, 126, 234, 0.30) 0%, rgba(118, 75, 162, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(240, 147, 251, 0.30) 0%, rgba(245, 87, 108, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(79, 172, 254, 0.30) 0%, rgba(0, 242, 254, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(67, 233, 123, 0.30) 0%, rgba(56, 249, 215, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(250, 112, 154, 0.30) 0%, rgba(254, 225, 64, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(161, 140, 209, 0.30) 0%, rgba(251, 194, 235, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(252, 203, 144, 0.30) 0%, rgba(213, 126, 235, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(224, 195, 252, 0.30) 0%, rgba(142, 197, 252, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(245, 87, 108, 0.30) 0%, rgba(255, 154, 158, 0.16) 100%)',
+  'linear-gradient(135deg, rgba(102, 126, 234, 0.30) 0%, rgba(67, 233, 123, 0.16) 100%)',
+]
+
+const ACCORDION_GAP = 10
+const EXPAND_RATIO = 0.52 // 展开卡片占整行比例
+
+// 单张卡片展开/收起的 GSAP 动画
+let accordionTween = null
+
+const animateAccordion = (activeIdx) => {
+  const cards = accordionCardRefs.value
+  const container = accordionRef.value
+  if (!cards.length || !container) return
+
+  const n = cards.length
+  const containerWidth = container.clientWidth
+  const gaps = (n - 1) * ACCORDION_GAP
+  const expandedWidth = containerWidth * EXPAND_RATIO
+  const contractedWidth = (containerWidth - expandedWidth - gaps) / Math.max(n - 1, 1)
+
+  if (accordionTween) accordionTween.kill()
+  accordionTween = gsap.timeline()
+
+  cards.forEach((card, i) => {
+    if (!card) return
+    const isActive = i === activeIdx
+
+    accordionTween.to(card, {
+      width: isActive ? expandedWidth : contractedWidth,
+      rotationY: isActive ? 0 : (i < activeIdx ? -8 : 8),
+      duration: 0.6,
+      ease: 'power3.out',
+      overwrite: 'auto',
+    }, 0)
+
+    const bg = card.querySelector('.accordion-card__bg')
+    const overlay = card.querySelector('.accordion-card__overlay')
+    const content = card.querySelector('.accordion-card__content')
+    if (bg) {
+      // 毛玻璃通透度 + 灰滤镜：激活卡片清晰彩色，未激活半透明 + 灰度
+      gsap.to(bg, {
+        opacity: isActive ? 1 : 0.55,
+        filter: isActive ? 'grayscale(0%)' : 'grayscale(100%)',
+        duration: 0.6,
+        ease: 'power3.out',
+        overwrite: 'auto',
+      })
+    }
+    if (overlay) {
+      gsap.to(overlay, {
+        opacity: isActive ? 0 : 0.12,
+        duration: 0.6,
+        ease: 'power3.out',
+        overwrite: 'auto',
+      })
+    }
+    if (content) {
+      // 视差漂移：非激活卡片内容微微平移，激活后归位
+      const parallaxX = isActive ? 0 : (i < activeIdx ? -8 : 8)
+      gsap.to(content, {
+        opacity: isActive ? 1 : 0.7,
+        x: parallaxX,
+        duration: 0.5,
+        ease: 'power3.out',
+        overwrite: 'auto',
+      })
+    }
+  })
+}
+
+const onAccordionHover = (idx) => {
+  activeAccordionIdx.value = idx
+  animateAccordion(idx)
+}
+
+// 鼠标离开画廊 → 恢复默认状态：第一张卡片展开
+const onAccordionLeave = () => {
+  activeAccordionIdx.value = 0
+  animateAccordion(0)
+}
+
+// ----- 点击卡片 → 跳转个性化实训台 -----
+const onAccordionCardClick = (task, idx) => {
+  if (idx !== activeAccordionIdx.value) {
+    onAccordionHover(idx)
+    return
+  }
+  router.push({ path: '/training', query: { taskId: task.id } })
+}
+
+// 状态标签辅助函数
+const statusClass = (s) => {
+  if (s === '已完成') return 'status-done'
+  if (s === '进行中') return 'status-doing'
+  return 'status-todo'
+}
+
+// ----- 获取数据 -----
+const fetchCoverflowTasks = async () => {
+  coverflowLoading.value = true
+  let list = []
+  try {
+    const { data } = await trainingApi.preview({ limit: 10 })
+    list = Array.isArray(data) ? data : (data?.data || data?.tasks || data?.items || [])
+  } catch {
+    // API 不可用
+  }
+  if (list.length === 0) {
+    list = [
+      { id: 1, title: '前端性能优化实战', description: '使用 Lighthouse 对首页做全量性能体检，针对首屏加载慢、JS 包体过大等问题逐项优化，将核心指标提升至 90 分以上并沉淀优化文档。', status: '进行中', steps: ['性能体检与基线', '代码分割与懒加载', '图片压缩与缓存策略', 'LCP 专项优化', '复测验证与归档'], aiComment: '首屏指标提升显著，FCP 已降至 2s 以内。下一步建议压缩 vendor 包体积并开启 preload，冲刺 LCP 90 分。' },
+      { id: 2, title: '后端接口并发压测', description: '基于 JMeter 对核心下单链路设计阶梯加压场景，在 1000 QPS 目标下定位连接池耗尽与慢 SQL 瓶颈，通过参数调优与缓存改造完成性能验证。', status: '未开始', steps: ['压测场景与用例设计', '压测环境与脚本搭建', '阶梯加压与数据采集', '瓶颈定位与参数调优', '回归复测并输出报告'], aiComment: '该任务尚未启动。建议先梳理接口依赖与压测基线，并预留两个工作日用于瓶颈定位，避免影响后续排期。' },
+      { id: 3, title: '全链路追踪实践', description: '在微服务中接入 OpenTelemetry SDK，通过 Jaeger 实现请求级链路追踪，配置合理的采样策略并接入告警，覆盖核心链路的调用拓扑可视化。', status: '已完成', steps: ['SDK 接入与埋点', '链路数据上报与展示', '采样策略与降噪配置', '链路告警与拓扑分析', '复盘并输出接入文档'], aiComment: '链路数据完整、采样率配置合理，告警覆盖核心链路。可接入日志关联与错误追踪，进一步提升排障效率。' },
+      { id: 4, title: '自动化测试覆盖', description: '基于 Playwright 为核心业务模块编写 UI 自动化用例，覆盖登录、下单、支付等关键路径，集成到 CI 流水线实现每日回归并生成可视化报告。', status: '进行中', steps: ['测试框架与基线搭建', '核心用例编写', '异常分支与数据准备', 'CI 集成与定时回归', '报告与覆盖率分析'], aiComment: '关键路径用例已就绪，回归稳定通过。建议补齐异常分支与边界场景，将覆盖率目标提升至 70% 以上。' },
+      { id: 5, title: '容器化部署实战', description: '编写多阶段 Dockerfile 构建轻量化镜像，使用 docker-compose 编排依赖服务，最终将应用一键部署到 K8s 集群并配置健康检查与自动扩缩容。', status: '未开始', steps: ['Dockerfile 编写与镜像瘦身', 'docker-compose 本地编排', '镜像仓库与 CI 推送', 'K8s 部署与探针配置', 'HPA 扩缩容与上线验证'], aiComment: '建议优先从基础镜像选型与多阶段构建入手控制镜像体积，部署阶段重点关注存活与就绪探针配置以及优雅停机。' },
+      { id: 6, title: '数据库索引优化', description: '从慢查询日志中提取 Top SQL 逐条分析执行计划，针对高频查询条件设计复合索引，并通过覆盖索引策略验证读写性能的平衡。', status: '进行中', steps: ['慢查询日志采集', '执行计划分析', '复合索引设计', '索引效果验证', '冗余索引清理与归档'], aiComment: '复合索引收益明显，典型查询耗时下降 80% 以上。建议关注索引基数与写入放大，及时清理低效冗余索引。' },
+    ]
+  }
+  coverflowTasks.value = list.map((t, i) => ({
+    id: t.id ?? i + 1,
+    title: t.title || t.name || t.text || `实训任务 ${i + 1}`,
+    text: t.title || t.name || t.text || `实训任务 ${i + 1}`,
+    description: t.description || '',
+    status: t.status || '',
+    aiComment: t.aiComment || '',
+    steps: t.steps || t.step_breakdown || t.breakdown || defaultSteps,
+  }))
+  coverflowLoading.value = false
+  nextTick(() => {
+    // 默认激活第一张卡片
+    activeAccordionIdx.value = 0
+    animateAccordion(0)
+  })
+}
+
+// 搜索相关
+const searchKeyword = ref('')
+const hotSearchTags = ref(['Java 工程师', '前端开发', '算法专家', '产品经理', '数据分析师', 'AI 工程师'])
+
+// 职业分类
+const categories = ref([
+  { name: 'Java开发工程师', icon: 'Cpu', tag: '高需求', insight: { scarcity: '高', weakness: 'JVM 内存模型与并发编程', decision: '建议优先攻克 JVM 内存模型与并发编程，该技能在 Java 岗位中权重占比约 25%，且面试高频考察。' } },
+  { name: 'C/C++开发工程师', icon: 'Cpu', tag: '硬核岗', insight: { scarcity: '高', weakness: '内存管理与多线程性能优化', decision: '建议优先攻克内存管理与多线程优化，C/C++ 岗位中底层性能优化能力权重占比约 30%，是区分度最高的技能。' } },
+  { name: '前端开发工程师', icon: 'Monitor', tag: '热门岗', insight: { scarcity: '中', weakness: '框架源码与性能优化', decision: '建议优先攻克前端框架源码分析与性能优化，该技能在面试中权重占比约 22%，直接影响项目架构能力评估。' } },
+  { name: '软件测试工程师', icon: 'CircleCheck', tag: '品质岗', insight: { scarcity: '中', weakness: '自动化测试框架设计', decision: '建议优先攻克自动化测试框架设计，该技能在测试岗位中权重占比约 25%，是中高级测试岗位的核心要求。' } },
+  { name: '软件测试工程师(专项方向)', icon: 'CircleCheck', tag: '专项岗', insight: { scarcity: '中', weakness: '性能测试与安全测试', decision: '建议优先攻克性能测试与安全测试，专项测试能力在高级岗位中权重占比约 28%，是薪资提升的关键。' } },
+  { name: '硬件测试工程师', icon: 'Setting', tag: '技术岗', insight: { scarcity: '高', weakness: '硬件信号测试与可靠性分析', decision: '建议优先攻克硬件信号测试与可靠性分析，该技能在硬件测试岗位中权重占比约 25%，是岗位核心能力。' } },
+  { name: '实施工程师', icon: 'Setting', tag: '项目型', insight: { scarcity: '中', weakness: '系统部署与多方协调', decision: '建议优先攻克系统部署方案设计与项目实施协调，该技能在实施岗位中权重占比约 20%，是项目交付的关键。' } },
+  { name: '技术支持工程师', icon: 'User', tag: '服务型', insight: { scarcity: '低', weakness: '复杂问题排查与故障分析', decision: '建议优先攻克复杂问题排查与故障分析，该技能在技术支持岗位中权重占比约 22%，直接影响客户满意度。' } },
+  { name: '游戏运营', icon: 'MagicStick', tag: '运营岗', insight: { scarcity: '低', weakness: '数据分析与用户增长策略', decision: '建议优先攻克数据分析与用户增长策略，该技能在游戏运营岗位中权重占比约 25%，是精细化运营的基础。' } },
+  { name: '科研人员', icon: 'Document', tag: '研究型', insight: { scarcity: '高', weakness: '论文复现与创新方法设计', decision: '建议优先攻克论文复现与创新方法设计，该技能在科研岗位中权重占比约 30%，是产出高质量成果的前提。' } }
+]);
+
+// 搜索处理
+const handleSearch = () => {
+  if (!searchKeyword.value.trim()) {
+    ElMessage.info({
+    message: '请输入搜索关键词',
+    duration: 1500 // 设置为 1.5 秒 (1500ms)，你可以改成 1000, 800 等更短的时间
+})
+    return
+  }
+  router.push(`/jobs?keyword=${encodeURIComponent(searchKeyword.value)}`)
+}
+
+// 标签搜索
+const searchByTag = (tag) => {
+  searchKeyword.value = tag
+  handleSearch()
+}
+
+// 选择分类
+const selectCategory = (idx) => {
+  const category = categories.value[idx]
+  console.log('选择分类:', category?.name)
+  // 预留跳转或筛选逻辑
+  router.push(`/jobs?category=${idx + 1}`)
+}
+
+// 路由跳转
+const goToJobs = () => router.push('/jobs')
+const goToProfile = () => router.push('/profile/info')
+
+// ========== 数据粒子放射引力场 ==========
 const particleContainer = ref(null)
 const bgCanvas = ref(null)
 const centerNode = ref(null)
@@ -684,7 +809,7 @@ const initCanvas = () => {
   bgCanvas.value.width = rect.width;
   bgCanvas.value.height = rect.height;
   canvasCtx = bgCanvas.value.getContext('2d');
-  
+
   particles = [];
   for (let i = 0; i < 500; i++) {
     particles.push({
@@ -702,7 +827,7 @@ const initCanvas = () => {
 const renderLoop = () => {
   if (!canvasCtx || !bgCanvas.value || !particleContainer.value) return;
   const rect = particleContainer.value.getBoundingClientRect();
-  
+
   // 清空画布
   canvasCtx.clearRect(0, 0, rect.width, rect.height);
 
@@ -778,7 +903,7 @@ const handleMouseMove = (e) => {
     const distance = Math.sqrt(dx*dx + dy*dy);
 
     if (distance < 200) {
-      gsap.to(node, { 
+      gsap.to(node, {
         x: dx / 8, y: dy / 8, duration: 0.6, ease: 'power2.out', overwrite: 'auto'
       });
     } else {
@@ -822,7 +947,7 @@ const runExplosionAnimation = () => {
   if (dataNodes.value.length > 0) {
     // 技巧：我们遍历每个节点，为它们创建单独的 GSAP 动画
     dataNodes.value.forEach((node, index) => {
-      
+
       // 🌟 生成随机参数，确保每个球都是独一无二的
       // 1. 速度随机：放射持续时间在 1.2秒 到 2.2秒 之间
       const randomDuration = 1.2 + Math.random() * 1.0;
@@ -831,17 +956,17 @@ const runExplosionAnimation = () => {
       // 3. 缓动随机：大部分先快后慢，小部分稍微带一点弹性
       const randomEase = Math.random() > 0.8 ? "back.out(1.5)" : "power4.out";
       // 4. 景深随机：从不同的深远度发散出来
-      const randomDepth = -300 - Math.random() * 300; 
+      const randomDepth = -300 - Math.random() * 300;
 
       gsap.from(node, {
         // 初始状态：全部压制到容器中心
-        x: 0, 
-        y: 0, 
+        x: 0,
+        y: 0,
         z: randomDepth,    // 🌟 关键：景深随机
 
         opacity: 0,         // 从透明开始
         scale: 0,           // 从 0 大小开始
-        
+
         // 应用随机生成的参数
         duration: randomDuration, // 🌟 关键：速度随机
         delay: 0.2 + randomDelay,   // 🌟 关键：启动时差随机
@@ -852,7 +977,7 @@ const runExplosionAnimation = () => {
         onComplete: () => {
           if (index === dataNodes.value.length - 1) {
             // 确保漂浮动画在放射完成后才开始
-            startGsapFloating(); 
+            startGsapFloating();
           }
         }
       });
@@ -861,12 +986,9 @@ const runExplosionAnimation = () => {
 };
 
 // ==========================================
-// 生命周期管理
+// 粒子引力场生命周期
 // ==========================================
 onMounted(() => {
-  startTyping();
-  window.addEventListener('resize', handleResize);
-  
   // 启动 Stitch 特效
   nextTick(() => {
     initCanvas();
@@ -895,169 +1017,17 @@ onMounted(() => {
   });
 })
 
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize);
-  window.removeEventListener('mousemove', handleMouseMove);
-  if (animationFrameId) cancelAnimationFrame(animationFrameId);
-})
-
-const router = useRouter()
-
-
-const fullText = "职途虽远，智能无界；跨越方寸，预见无限"
-const typedText = ref("")
-const typingSpeed = 150 // 每个字的打字速度（毫秒）
-
-// 修改你的 startTyping 函数
-let typingTimer = null; // 在函数外部定义变量
-
-const startTyping = () => {
-  // 🌟 新增：如果已经在打字了，先停止之前的，防止重复
-  if (typingTimer) clearInterval(typingTimer);
-  typedText.value = ''; 
-  
-  let i = 0;
-  typingTimer = setInterval(() => {
-    typedText.value += fullText[i];
-    i++;
-    if (i >= fullText.length) {
-      clearInterval(typingTimer);
-      typingTimer = null;
-    }
-  }, 100);
-};
-
-
-
-// 搜索相关
-const searchKeyword = ref('')
-const hotSearchTags = ref(['Java 工程师', '前端开发', '算法专家', '产品经理', '数据分析师', 'AI 工程师'])
-
-// 职业分类
-const categories = ref([
-  { name: '前端开发 · 交互重构', icon: 'Monitor', tag: '职能增益', insight: { scarcity: '中', weakness: 'WebAssembly 实战', decision: '建议优先攻克”WebAssembly 实战”，该技能权重占 25% 且您当前掌握度仅 40%。' } },
-  { name: '后端开发 · 架构设计', icon: 'Cpu', tag: '高需求', insight: { scarcity: '高', weakness: '高并发锁机制', decision: '建议优先攻克”高并发锁机制”，该技能权重占 30% 且您当前掌握度仅 45%。' } },
-  { name: 'AI 算法 · 模型演进', icon: 'MagicStick', tag: '快迭代', insight: { scarcity: '高', weakness: '垂直领域模型微调', decision: '建议优先攻克”垂直领域模型微调”，该技能权重占 28% 且您当前掌握度仅 35%。' } },
-  { name: '产品经理 · 数字转型', icon: 'User', tag: '跨界型', insight: { scarcity: '中', weakness: '数据驱动决策方法', decision: '建议优先攻克”数据驱动决策方法”，该技能权重占 22% 且您当前掌握度仅 50%。' } },
-  { name: '网络安全 · 攻防演练', icon: 'Lock', tag: '高门槛', insight: { scarcity: '高', weakness: '零信任架构设计', decision: '建议优先攻克”零信任架构设计”，该技能权重占 26% 且您当前掌握度仅 38%。' } },
-  { name: '数据分析 · 决策支持', icon: 'PieChart', tag: '核心岗', insight: { scarcity: '中', weakness: '自动化报表与业务洞察', decision: '建议优先攻克”自动化报表与业务洞察”，该技能权重占 24% 且您当前掌握度仅 42%。' } },
-  { name: '移动开发 · 跨端框架', icon: 'Iphone', tag: '稳健型', insight: { scarcity: '低', weakness: '跨端框架（Flutter/HarmonyOS）', decision: '建议优先攻克”跨端框架（Flutter/HarmonyOS）”，该技能权重占 20% 且您当前掌握度仅 36%。' } },
-  { name: '运维开发 · SRE', icon: 'Setting', tag: '硬核岗', insight: { scarcity: '中', weakness: 'AIOps 告警预测建模', decision: '建议优先攻克”AIOps 告警预测建模”，该技能权重占 25% 且您当前掌握度仅 33%。' } },
-  { name: 'UI/UX · 体验设计', icon: 'Brush', tag: '视觉系', insight: { scarcity: '低', weakness: '交互逻辑与用户行为分析', decision: '建议优先攻克”交互逻辑与用户行为分析”，该技能权重占 21% 且您当前掌握度仅 44%。' } },
-  { name: '测试开发 · 自动化', icon: 'CircleCheck', tag: '品质岗', insight: { scarcity: '低', weakness: '全链路压测与安全扫描', decision: '建议优先攻克”全链路压测与安全扫描”，该技能权重占 23% 且您当前掌握度仅 41%。' } }
-]);
-const currentCategory = ref(1)
-
-// 登录状态
-const isLoggedIn = ref(false)
-const loginLoading = ref(false)
-
-// 登录表单
-const loginForm = ref({
-  username: '',
-  password: ''
-})
-
-// 当前用户数据
-const currentUser = ref({
-  name: '',
-  avatar: '',
-  tags: ['#前端', '#高薪', '#远程', '#AI', '#创新', '#成长']
-})
-
-// 格式化岗位数据
-const formatJobData = (job) => ({
-  jobTitle: job.title || job.jobTitle,
-  overlapRate: job.overlapRate || job.matchRate || 0,
-  studyWeeks: job.studyWeeks || 0,
-  topWeaknesses: job.topWeaknesses || job.weaknesses || [],
-  tags: job.tags || []
-})
-
-// 搜索处理
-const handleSearch = () => {
-  if (!searchKeyword.value.trim()) {
-    ElMessage.info({
-    message: '请输入搜索关键词',
-    duration: 1500 // 设置为 1.5 秒 (1500ms)，你可以改成 1000, 800 等更短的时间
-})
-    return
-  }
-  router.push(`/jobs?keyword=${encodeURIComponent(searchKeyword.value)}`)
-}
-
-// 标签搜索
-const searchByTag = (tag) => {
-  searchKeyword.value = tag
-  handleSearch()
-}
-
-// 选择分类
-const selectCategory = (categoryId) => {
-  currentCategory.value = categoryId
-  const category = categories.value.find(c => c.id === categoryId)
-  console.log('选择分类:', category?.name)
-  // 预留跳转或筛选逻辑
-  router.push(`/jobs?category=${categoryId}`)
-}
-
-// 处理登录
-const handleLogin = async () => {
-  if (!loginForm.value.username || !loginForm.value.password) {
-    ElMessage.warning('请输入用户名和密码')
-    return
-  }
-
-  loginLoading.value = true
-
-  // 模拟异步请求
-  await new Promise(resolve => setTimeout(resolve, 1000))
-
-  loginLoading.value = false
-  isLoggedIn.value = true
-
-  currentUser.value = {
-    name: loginForm.value.username,
-    avatar: `https://ui-avatars.com/api/?name=${loginForm.value.username}&background=667eea&color=fff`,
-    tags: ['#前端', '#高薪', '#远程', '#AI', '#创新', '#成长']
-  }
-
-  ElMessage.success('登录成功')
-}
-
-// 处理退出
-const handleLogout = () => {
-  isLoggedIn.value = false
-  loginForm.value = {
-    username: '',
-    password: ''
-  }
-  currentUser.value = {
-    name: '',
-    avatar: '',
-    tags: []
-  }
-  ElMessage.success('已退出登录')
-}
-
-// 路由跳转
-const goToJobs = () => router.push('/jobs')
-const goToProfile = () => router.push('/profile/info')
-
 // 生命周期
 onMounted(() => {
-  loadHotJobs()
   checkProfileStatus()
   fetchDashboardData()
   window.addEventListener('resize', handleResize)
 })
 
-onMounted(() => {
-  // 打字机动画已在第一个 onMounted 中启动
-})
-
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('mousemove', handleMouseMove)
+  if (animationFrameId) cancelAnimationFrame(animationFrameId)
   disposeRadarChart()
 })
 
@@ -1415,24 +1385,55 @@ const handleResize = () => {
 
     
 
+    .category-item-inner {
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+
     /* A. 默认图标颜色微调 */
-    .category-icon { 
-      font-size: 18px; 
-      margin-right: 14px; 
+    .category-icon {
+      font-size: 18px;
+      margin-right: 14px;
       color: #90a4ae;              /* 🎨 默认态调淡图标：灰蓝色，减少干扰 */
       transition: all 0.3s ease;
+      align-self: flex-start;
+      margin-top: 2px;
     }
-    .category-name { 
-      flex: 1; 
-      font-size: 15px; 
+    .category-text {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+    .category-name {
+      font-size: 15px;
       font-weight: 500;            /* 中等粗细 */
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
       transition: all 0.3s ease;
     }
-    .category-arrow { 
-      font-size: 12px; 
-      color: #c0c4cc; 
+    .category-tag {
+      margin: 0;
+      padding: 1px 8px;
+      font-size: 11px;
+      line-height: 16px;
+      border-radius: 4px;
+      color: #409eff;
+      background: rgba(64, 158, 255, 0.08);
+      border-color: rgba(64, 158, 255, 0.2);
+    }
+    .category-arrow {
+      font-size: 12px;
+      color: #c0c4cc;
       opacity: 0.5;                /* 🎨 调淡箭头：静态下不明显 */
       transition: all 0.3s ease;
+      margin-left: 6px;
+      flex-shrink: 0;
     }
 
     /* B. 悬停态 (Hover)：灵动反馈 */
@@ -1897,192 +1898,599 @@ const handleResize = () => {
 }
 
 /* ========================================================== */
-/* 🔥 5. 热门岗位推荐深度美化：精致网格与高级质感 */
+/* 🌌 数据粒子放射引力场（保留自原热门岗位板块） */
 /* ========================================================== */
-/* ========================================================== */
-/* 🔥 5. 热门岗位推荐美化：方案一 - “浮雕白”卡片 */
-/* ========================================================== */
-.hot-jobs-section {
-  max-width: 1400px;
-  margin: 60px auto 100px; /* 🌟 增加上下间距，拉开层级呼吸感 */
+.particle-section {
+  max-width: 1600px;
+  margin: 120px auto 120px;
   padding: 0 40px;
   position: relative;
   z-index: 5;
+  overflow: visible;
+}
 
-  /* A. 标题区域美化 (保持之前的高级感) */
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    margin-top: 50px; 
-    padding-left: 10px;
-    border-left: 4px solid #409EFF; 
-    
-    .section-title { 
-      font-size: 26px; font-weight: 800; color: #334455; letter-spacing: 1px;
+/* 🌟 核心：数据粒子放射板块 */
+.data-particle-field {
+  position: relative;
+  width: 100%;
+  height: 700px;
+  margin-top: -100px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1000px;
+
+  .bg-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: -3;
+    pointer-events: none;
+    background: radial-gradient(circle at center, #f8faff 0%, transparent 50%);
+  }
+
+  .connection-lines {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: -1;
+    pointer-events: none;
+    overflow: visible;
+
+    .orbit-ring {
+      transform-origin: center;
+      animation: rotateRing 60s linear infinite;
     }
 
-    :deep(.el-link) {
-      font-size: 15px; font-weight: 600; color: rgba(51, 68, 85, 0.6); transition: all 0.3s;
-      .el-icon { font-size: 14px; margin-left: 5px; transition: transform 0.3s ease; }
-      &:hover { color: #409EFF; .el-icon { transform: translateX(4px); } }
+    path {
+      animation: pulse-dash 2s linear infinite;
     }
   }
 
-  /* B. 网格布局 */
-  /* 容器：隐藏溢出并确保全屏感 */
-.infinite-scroll-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 30px; /* 两行之间的间距 */
-  overflow: hidden;
-  padding: 20px 0;
-  width: 100%;
-}
+  &::before {
+    content: "";
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    z-index: -2;
+    background:
+      radial-gradient(circle at 45% 25%, rgba(202, 229, 253, 0.654) 0%, transparent 35%),
+      radial-gradient(circle at 60% 65%, rgba(201, 163, 244, 0.267) 0%, transparent 30%);
+    filter: blur(10px);
+    animation: quantumGlow 15s ease-in-out infinite alternate;
+  }
 
-/* 滚动轨道容器 */
-.scroll-row {
-  width: 100%;
-  height: auto;
-  overflow: hidden;
-  background-color: #fafbfc00;
-}
-
-/* 实际滑动的长条 */
-.scroll-track {
-  display: flex;
-  width: max-content; /* 核心：由内容撑开总宽度 */
-  will-change: transform;
-  transition: animation-play-state 0.3s ease;
-}
-
-/* 每一组卡片的包裹 */
-.scroll-group {
-  display: flex;
-  gap: 30px; /* 卡片之间的间距 */
-  padding-right: 30px; /* 确保克隆组拼接时间距一致 */
-  padding-top: 5px;
-}
-
-/* 🌟 第一行动画：向左 */
-.row-left .scroll-track {
-  animation: scrollLeft 30s linear infinite;
-}
-
-/* 🌟 第二行动画：反向（向右） */
-.row-right .scroll-track {
-  animation: scrollLeft 35s linear infinite reverse;
-}
-
-.scroll-row {
-  width: 100%;
-  overflow: hidden;
-  /* 确保 hover 判定范围覆盖整行 */
-  padding: 10px 0; 
-  
-  /* 当鼠标悬停在这一行时，仅这一行的轨道停止动画 */
-  &:hover {
-    .scroll-track {
-      animation-play-state: paused;
-    }
+  &::after {
+    content: "";
+    position: absolute;
+    top: -100px; left: 0; width: 100%; height: calc(100% + 200px);
+    z-index: -1;
+    background-image:
+      radial-gradient(circle at 1.5px 1.5px, rgba(64, 158, 255, 0.15) 1px, transparent 0);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(circle at center, black 30%, transparent 90%);
+    opacity: 0.6;
+    animation: quantumParticles 25s linear infinite;
   }
 }
 
-/* 定义无限滚动关键帧 */
-@keyframes scrollLeft {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    /* 移动总宽度的一半（即移动完一整组卡片） */
-    transform: translateX(-50%);
-  }
-}
-
-/* 🌟 核心：针对每个卡片容器的深度美化 */
-:deep(.job-card) {
-  /* 基础形状与尺寸 */
-  flex: 0 0 300px;
-  width: 300px;
-  height: auto;
-  min-height: 150px;
-  margin: 8px 12px;
-
-  /* 玻璃拟态质感 */
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(240, 248, 255, 0.45)) !important;
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-
-  /* 精致边框 */
-  border: 1px solid rgba(255, 255, 255, 0.55) !important;
-  border-radius: 16px !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 4px 20px rgba(80, 152, 249, 0.06),
-    0 1px 4px rgba(0, 0, 0, 0.03) !important;
-
-  /* 动画过渡 */
-  transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1) !important;
+.post-sphere {
+  position: absolute;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
   cursor: pointer;
+
+  background: rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.8),
+    0 10px 40px -10px rgba(177, 138, 255, 0.15) !important;
+
+  .label {
+    font-size: 13px; font-weight: 700; color: #303133; text-align: center;
+    padding: 10px;
+    transition: color 0.3s;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.8) !important;
+    box-shadow: 0 0 35px rgba(0, 219, 230, 0.3) !important;
+    z-index: 20;
+    .label { color: #409EFF; }
+  }
+}
+
+@keyframes pulse-dash {
+  to { stroke-dashoffset: -20; }
+}
+@keyframes rotateRing {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.center-text-block {
+  text-align: center;
+  z-index: 10;
+  color: #334455;
+
+  .small-title {
+    font-size: 14px; color: #90a4ae; font-weight: 500; margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+  .big-data {
+    font-size: 52px; font-weight: 800; line-height: 1.2; margin-bottom: 12px;
+    letter-spacing: -2px;
+
+    .highlight {
+      background: linear-gradient(135deg, #409EFF 0%, #0076FF 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 900;
+    }
+  }
+  .ai-analysis {
+    font-size: 26px; font-weight: 600; color: rgba(51, 68, 85, 0.7);
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  }
+}
+
+.post-sphere {
+  position: absolute;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+
+  background: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05) !important;
+  cursor: pointer;
+  overflow: hidden;
+
+  box-shadow:
+    0 8px 32px 0 rgba(31, 38, 135, 0.1),
+    inset 0 0 10px rgba(255, 255, 255, 0.2);
+
+  color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  .label {
+    font-size: 13px; font-weight: 600; color: #409EFF; text-align: center;
+    padding: 10px;
+  }
+
+  &:hover {
+    background: rgba(64, 158, 255, 0.3) !important;
+  border: 1px solid rgba(64, 158, 255, 0.5);
+  transform: scale(1.2) translateY(-5px) !important;
+  box-shadow: 0 0 20px rgba(64, 158, 255, 0.4);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+  }
+}
+
+.post-sphere::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  transform: rotate(45deg);
+  animation: shine 4s infinite linear;
+}
+
+@keyframes shine {
+  0% { transform: translateX(-100%) rotate(45deg); }
+  100% { transform: translateX(100%) rotate(45deg); }
+}
+
+.sphere-1 {
+  width: 90px; height: 90px;
+  top: 18%; left: 28%;
+  transform: translateZ(50px);
+  background: linear-gradient(135deg, #f9d1c0 0%, #fcfbe3 100%) !important;
+}
+
+.sphere-2 {
+  width: 100px; height: 100px;
+  top: 60%; left: 20%;
+  transform: translateZ(-20px);
+  background: linear-gradient(135deg, #fffbeb 0%, #dffec7 100%) !important;
+}
+
+.sphere-3 {
+  width: 120px; height: 120px;
+  top: 10%; left: 45%;
+  transform: translateZ(100px);
+  background: linear-gradient(135deg, #abcff6 0%, #c4efeb 100%) !important;
+}
+
+.sphere-4 {
+  width: 85px; height: 85px;
+  top: 18%; left: 75%;
+  transform: translateZ(30px);
+  background: linear-gradient(135deg, #fef2f2 0%, #fee4fa 100%) !important;
+}
+
+.sphere-5 {
+  width: 95px; height: 95px;
+  top: 60%; left: 78%;
+  transform: translateZ(10px);
+  background: linear-gradient(135deg, #f0f9eb 0%, #d8f3f3 100%) !important;
+}
+
+.sphere-6 {
+  width: 75px; height: 75px;
+  top: 35%; left: 10%;
+  transform: translateZ(-50px);
+}
+
+.sphere-7 {
+  width: 80px; height: 80px;
+  top: 38%; left: 85%;
+  transform: translateZ(-40px);
+}
+
+.sphere-8 {
+  width: 90px; height: 90px;
+  top: 65%; left: 50%;
+  transform: translateZ(-10px);
+}
+
+.sphere-9 {
+  width: 70px; height: 70px;
+  top: 80%; left: 52%;
+  transform: translateZ(-30px);
+  opacity: 0.7 !important;
+}
+
+.sphere-10 {
+  width: 65px; height: 65px;
+  top: 8%; left: 8%;
+  transform: translateZ(-50px);
+  opacity: 0.6 !important;
+}
+
+.sphere-11 {
+  width: 72px; height: 72px;
+  top: 50%; left: 92%;
+  transform: translateZ(-60px);
+  opacity: 0.5 !important;
+}
+
+.sphere-12 {
+  width: 60px; height: 60px;
+  top: 2%; left: 62%;
+  transform: translateZ(-80px);
+  opacity: 0.4 !important;
+}
+
+.sphere-13 {
+  width: 75px; height: 75px;
+  top: 78%; left: 28%;
+  transform: translateZ(-40px);
+  opacity: 0.7 !important;
+}
+
+.sphere-14 {
+  width: 68px; height: 68px;
+  top: 75%; left: 68%;
+  transform: translateZ(-55px);
+  opacity: 0.6 !important;
+}
+
+.sphere-15 {
+  width: 70px; height: 70px;
+  top: 50%; left: 4%;
+  transform: translateZ(-70px);
+  opacity: 0.5 !important;
+}
+
+.sphere-16 {
+  width: 62px; height: 62px;
+  top: 3%; left: 32%;
+  transform: translateZ(-90px);
+  opacity: 0.4 !important;
+}
+
+@keyframes floatRandomly {
+  0% { transform: translateY(0) rotate(0deg) translateZ(0); }
+  33% { transform: translateY(-35px) translateX(-10px) rotate(6deg) translateZ(10px); }
+  66% { transform: translateY(20px) translateX(15px) rotate(-5deg) translateZ(-5px); }
+  100% { transform: translateY(0) rotate(0deg) translateZ(0); }
+}
+
+@keyframes Blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes quantumFlow {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes particleDrift {
+  0% { transform: translate(0, 0); opacity: 0.3; }
+  50% { transform: translate(-20px, 20px); opacity: 0.6; }
+  100% { transform: translate(0, 0); opacity: 0.3; }
+}
+
+@keyframes quantumGlow {
+  0% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+}
+
+@keyframes quantumParticles {
+  from { background-position: 0 0; }
+  to { background-position: 0 1000px; }
+}
+
+/* ========================================================== */
+/* 🔥 5. 实训任务预览 · 横向展开画廊（Accordion）               */
+/* ========================================================== */
+.task-gallery-section {
+  max-width: 1400px;
+  margin: -100px auto 80px;
+  padding: 0 40px;
+  position: relative;
+  z-index: 5;
+}
+
+.gallery-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 34px;
+  padding-left: 10px;
+  border-left: 4px solid #409EFF;
+
+  .section-title {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 800;
+    color: #334455;
+    letter-spacing: 1px;
+  }
+
+  .gallery-sub {
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+    letter-spacing: 1.5px;
+  }
+}
+
+/* ---- Accordion Gallery ---- */
+.accordion-gallery {
+  display: flex;
+  gap: 10px;
+  height: 460px;
+  position: relative;
+  perspective: 1200px;
+}
+
+.accordion-card {
+  flex: 0 0 auto;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: 16px;
+  position: relative;
+  will-change: transform, width;
+}
+
+.accordion-card__inner {
+  width: 100%;
+  height: 100%;
   position: relative;
   overflow: hidden;
-
-  /* 顶部微光装饰 */
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 20%;
-    right: 20%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(80, 152, 249, 0.3), transparent);
-    z-index: 1;
-  }
-
-  /* 悬停效果 */
-  &:hover {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.85), rgba(235, 245, 255, 0.6)) !important;
-    transform: translateY(-6px) scale(1.02) !important;
-    box-shadow:
-      0 12px 40px rgba(80, 152, 249, 0.12),
-      0 4px 12px rgba(0, 0, 0, 0.04) !important;
-    border-color: rgba(80, 152, 249, 0.3) !important;
-
-    /* 装饰：悬停时左侧出现彩色亮条 */
-    &::after {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      height: 100%;
-      width: 4px;
-      background: linear-gradient(to bottom, #a6ccfe, #f7d6f7);
-      border-radius: 4px 0 0 4px;
-    }
-  }
-
-  }
-
-/* 🌟 优化轨道遮罩，让两端消失感更自然 */
-.infinite-scroll-wrapper {
-  mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    black 15%,
-    black 85%,
-    transparent 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    black 15%,
-    black 85%,
-    transparent 100%
-  );
+  border-radius: 16px;
 }
 
+.accordion-card__bg {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 16px;
+  opacity: 0.55;
+  will-change: opacity, filter;
+}
 
+.accordion-card__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  opacity: 0;
+  border-radius: 16px;
+}
+
+.accordion-card__content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 40px 24px 22px;
+  background: linear-gradient(transparent 0%, rgba(255, 255, 255, 0.9) 100%);
+  color: #334455;
+  opacity: 1;
+  will-change: transform, opacity;
+}
+
+.accordion-card__badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #409EFF;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  border: 1px solid rgba(64, 158, 255, 0.18);
+}
+
+.accordion-card__progress {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.accordion-card__progress .progress-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.accordion-card__progress.status-done { color: #67C23A; }
+.accordion-card__progress.status-done .progress-dot { background: #67C23A; box-shadow: 0 0 6px rgba(103, 194, 58, 0.6); }
+.accordion-card__progress.status-doing { color: #409EFF; }
+.accordion-card__progress.status-doing .progress-dot { background: #409EFF; box-shadow: 0 0 6px rgba(64, 158, 255, 0.6); animation: pulse 1.6s infinite; }
+.accordion-card__progress.status-todo { color: #909399; }
+.accordion-card__progress.status-todo .progress-dot { background: #b0b3b8; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.accordion-card__thumb {
+  position: absolute;
+  top: 310px;
+  right: 80px;
+  width: 148px;
+  height: 148px;
+  object-fit: cover;
+  z-index: 2;
+  pointer-events: none;
+  will-change: filter;
+}
+
+.accordion-card__title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #1e293b;
+  max-width: 100%;
+}
+
+.accordion-card__desc {
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 10px;
+  line-height: 1.5;
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.accordion-card__steps {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+
+.accordion-card__step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  opacity: 0.9;
+  white-space: nowrap;
+  color: #475569;
+}
+
+.accordion-card__step .step-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(64, 158, 255, 0.55);
+  flex-shrink: 0;
+}
+
+.accordion-card__comment {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.accordion-card__comment .comment-label {
+  font-weight: 600;
+  color: #409EFF;
+  font-style: normal;
+  flex-shrink: 0;
+}
+
+/* ---- 响应式 ---- */
+@media (max-width: 768px) {
+  .task-gallery-section { padding: 0 20px; }
+  .accordion-gallery { height: 320px; }
+  .accordion-card { border-radius: 10px; }
+  .accordion-card__inner { border-radius: 10px; }
+  .accordion-card__content { padding: 18px 12px; }
+  .accordion-card__title { font-size: 15px; }
+  .accordion-card__desc { font-size: 12px; }
+  .accordion-card__step { font-size: 12px; }
+  .accordion-card__comment { font-size: 11px; }
+  .accordion-card__progress { font-size: 11px; padding: 2px 9px; }
+  .accordion-card__thumb { width: 40px; height: 40px; top: 10px; right: 72px; }
 }
 
 /* ========================================================== */
@@ -2193,50 +2601,18 @@ const handleResize = () => {
 .rp-content {
   flex: 1;
   position: relative;
-  perspective: 1200px;
   overflow: hidden;
 }
 
-/* 翻页卡片 */
+/* 画像概览页 */
 .rp-page {
-  position: absolute;
-  inset: 0;
   padding: 4px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  transition: all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
   background: #fff;
   border-radius: 14px;
-
-  &.rp-page-front.is-back {
-    transform: translateZ(-100px) translateY(20px) scale(0.88);
-    opacity: 0.25;
-    filter: blur(3px);
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  &.rp-page-back {
-    transform: translateZ(-100px) translateY(20px) scale(0.88);
-    opacity: 0.25;
-    filter: blur(3px);
-    pointer-events: none;
-    z-index: 1;
-
-    &.is-front {
-      transform: translateZ(0) translateY(0) scale(1);
-      opacity: 1;
-      filter: blur(0);
-      pointer-events: auto;
-      z-index: 2;
-    }
-  }
-
-  &.rp-page-front:not(.is-back) {
-    z-index: 2;
-  }
 }
 
 /* 用户头像行 + 综合评分 */
@@ -2334,122 +2710,12 @@ const handleResize = () => {
   &.info { color: #909399; }
 }
 
-/* 每日任务 */
-.rp-tasks {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-}
-
-.rp-tasks-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #606266;
-
-  .el-icon { color: #409eff; }
-}
-
-.rp-tasks-tag {
-  margin-left: auto;
-}
-
-.rp-tasks-list {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 6px;
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 2px;
-
-  &::-webkit-scrollbar {
-    width: 4px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: #dcdfe6;
-    border-radius: 4px;
-  }
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-}
-
-.rp-task-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  background: #fafafa;
-  border-radius: 8px;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #f0f5ff;
-    transform: translateX(3px);
-  }
-}
-
-.rp-task-text {
-  font-size: 13px;
-  color: #303133;
-  flex: 1;
-
-  &.done {
-    color: #c0c4cc;
-    text-decoration: line-through;
-  }
-}
-
+/* 能力缺口词云空态 */
 .rp-tasks-empty {
   font-size: 12px;
   color: #c0c4cc;
   text-align: center;
   padding: 20px 0;
-}
-
-/* 任务加载骨架屏 */
-.rp-tasks-loading {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.rp-task-skeleton {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: #fafafa;
-  border-radius: 8px;
-
-  .skel-check {
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
-    background-size: 200% 100%;
-    animation: rpShimmer 1.5s infinite;
-    flex-shrink: 0;
-  }
-
-  .skel-line {
-    height: 14px;
-    border-radius: 4px;
-    background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
-    background-size: 200% 100%;
-    animation: rpShimmer 1.5s infinite;
-  }
-}
-
-@keyframes rpShimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 
 /* ---- 第二页：能力缺口 + Agent 建议 ---- */
@@ -2482,394 +2748,6 @@ const handleResize = () => {
 @keyframes blink { 50% { opacity: 0.3; } }
 
 
-/* ========================================================== */
-/* 🔥 底部区域重构：Mobbin 数据粒子放射风 */
-/* ========================================================== */
-
-.hot-jobs-section {
-  max-width: 1600px; /* 🌟 稍微加宽，给放射球更多呼吸空间 */
-  margin: 120px auto 120px;
-  padding: 0 40px;
-  position: relative;
-  z-index: 5;
-  overflow: visible; /* 核心：隐藏溢出的球 */
-
-
-}
-
-/* 🌟 核心：数据粒子放射板块 */
-.data-particle-field {
-  position: relative;
-  width: 100%;
-  height: 700px; /* 🌟 核心：手动锁定高度，形成一个放射场 */
-  margin-top: -100px;
-  margin-bottom: 20px; /* 🎨 技巧：让下方的列表向上融合进去，产生流动感 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  perspective: 1000px; /* 🎨 高级：增加 3D 透视感，让球看起来有远近 */
-
-  .bg-canvas {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    z-index: -3;
-    pointer-events: none;
-    background: radial-gradient(circle at center, #f8faff 0%, transparent 50%);
-  }
-
-
-  
-  /* SVG 连线层 */
-  .connection-lines {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    z-index: -1;
-    pointer-events: none;
-    overflow: visible;
-
-    .orbit-ring {
-      transform-origin: center;
-      animation: rotateRing 60s linear infinite;
-    }
-    
-    path {
-      animation: pulse-dash 2s linear infinite;
-    }
-  }
-
-  &::before {
-    content: "";
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 100%; /* 🌟 铺满整个屏幕宽度 */
-    height: 100%;
-    z-index: -2; /* 在最底层 */
-    background: 
-      radial-gradient(circle at 45% 25%, rgba(202, 229, 253, 0.654) 0%, transparent 35%), 
-      radial-gradient(circle at 60% 65%, rgba(201, 163, 244, 0.267) 0%, transparent 30%);
-    filter: blur(10px); /* 稍微减小模糊值，让色彩焦点更凝聚 */
-    animation: quantumGlow 15s ease-in-out infinite alternate;
-  }
-
-  /* 🌟 第二层：流动的量子微粒（这就是你说的微小量子） */
-  &::after {
-    content: "";
-    position: absolute;
-    top: -100px; left: 0; width: 100%; height: calc(100% + 200px);
-    z-index: -1;
-    /* 🌟 使用更明显的颜色点，并增加密度 */
-    background-image: 
-      radial-gradient(circle at 1.5px 1.5px, rgba(64, 158, 255, 0.15) 1px, transparent 0);
-    background-size: 40px 40px; /* 🌟 缩小尺寸以增加量子点数量 */
-    mask-image: radial-gradient(circle at center, black 30%, transparent 90%);
-    opacity: 0.6;
-    animation: quantumParticles 25s linear infinite;
-  }
-}
-
-.post-sphere {
-  position: absolute; 
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  
-  /* 🌟 原本的 transition 不要了！因为会和 GSAP 冲突导致卡顿 */
-  /* transition: all 0.4s; -> 删除 */
-  
-  /* 极致毛玻璃材质 (Stitch 风格) */
-  background: rgba(255, 255, 255, 0.4) !important; 
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.6) !important;
-  
-  /* 发光内阴影与悬浮外阴影 */
-  box-shadow: 
-    inset 0 1px 1px rgba(255, 255, 255, 0.8),
-    0 10px 40px -10px rgba(177, 138, 255, 0.15) !important;
-
-  .label {
-    font-size: 13px; font-weight: 700; color: #303133; text-align: center;
-    padding: 10px;
-    transition: color 0.3s;
-  }
-
-  /* 悬停时的光效爆发现果 */
-  &:hover {
-    background: rgba(255, 255, 255, 0.8) !important;
-    box-shadow: 0 0 35px rgba(0, 219, 230, 0.3) !important;
-    z-index: 20; /* 悬停时置顶 */
-    .label { color: #409EFF; }
-  }
-}
-
-/* 轨道与流光动画 */
-@keyframes pulse-dash {
-  to { stroke-dashoffset: -20; }
-}
-@keyframes rotateRing {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* --- 注意：请删除原 CSS 中给 .sphere-1 到 sphere-16 写的 animation: floatRandomly ... --- */
-/* 因为现在我们使用更强大、更平滑的 GSAP 来接管它们的浮动了！ */
-
-/* A. 中间核心文字样式 */
-.center-text-block {
-  text-align: center;
-  z-index: 10;
-  color: #334455;
-  
-  .small-title {
-    font-size: 14px; color: #90a4ae; font-weight: 500; margin-bottom: 8px;
-    letter-spacing: 2px;
-  }
-  .big-data {
-    font-size: 52px; font-weight: 800; line-height: 1.2; margin-bottom: 12px;
-    letter-spacing: -2px; /* 🎨 技巧：紧凑字间距增加精致感 */
-    
-    .highlight { 
-      background: linear-gradient(135deg, #409EFF 0%, #0076FF 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      font-weight: 900;
-    }
-  }
-  .ai-analysis {
-    font-size: 26px; font-weight: 600; color: rgba(51, 68, 85, 0.7);
-    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.03); /* 微弱投影 */
-  }
-}
-
-/* B. 周围发散出去的“岗位球”通用样式 */
-.post-sphere {
-  position: absolute; /* 🌟 核心：全绝对定位 */
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  
-  /* 🌟 修改点：透明度从 0.6 改为 0.92，增加实体感 */
-  background: rgba(255, 255, 255, 0.15) !important; 
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.2);  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05) !important;
-  cursor: pointer;
-  overflow: hidden;
-
-  box-shadow: 
-    0 8px 32px 0 rgba(31, 38, 135, 0.1),
-    inset 0 0 10px rgba(255, 255, 255, 0.2);
-    
-  color: #fff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-  /* 文字样式微调 */
-  .label {
-    font-size: 13px; font-weight: 600; color: #409EFF; text-align: center;
-    padding: 10px;
-  }
-
-  /* 悬停交互美化 (Hover) */
-  &:hover {
-    background: rgba(64, 158, 255, 0.3) !important; /* 淡淡的品牌色主题 */
-  border: 1px solid rgba(64, 158, 255, 0.5);
-  transform: scale(1.2) translateY(-5px) !important;
-  box-shadow: 0 0 20px rgba(64, 158, 255, 0.4);
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
-  }
-}
-
-.post-sphere::before {
-  content: "";
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(
-    45deg,
-    transparent,
-    rgba(255, 255, 255, 0.1),
-    transparent
-  );
-  transform: rotate(45deg);
-  animation: shine 4s infinite linear;
-}
-
-@keyframes shine {
-  0% { transform: translateX(-100%) rotate(45deg); }
-  100% { transform: translateX(100%) rotate(45deg); }
-}
-
-/* C. 🌟 精细控制每一个球的位置、大小和动画时差 */
-/* 参考 Mobbin 布局进行手动微调 */
-
-/* sphere-1：左上 (前端) */
-.sphere-1 {
-  width: 90px; height: 90px;
-  top: 18%; left: 28%;
-  transform: translateZ(50px); /* 🎨 高级：利用 Z 轴拉近远近感 */
-  background: linear-gradient(135deg, #f9d1c0 0%, #fcfbe3 100%) !important; /* 🌟 核心修改：使用同色系渐变替换纯白，更有 AI 玻璃感 */
-}
-
-/* sphere-2：左下 (产品) */
-.sphere-2 {
-  width: 100px; height: 100px;
-  top: 60%; left: 20%;
-  transform: translateZ(-20px);
-  background: linear-gradient(135deg, #fffbeb 0%, #dffec7 100%) !important; /* 🌟 核心修改：使用同色系渐变替换纯白，更有 AI 玻璃感 */
-}
-
-/* sphere-3：上方 (AI算法 - 最核心) */
-.sphere-3 {
-  width: 120px; height: 120px;
-  top: 10%; left: 45%;
-  transform: translateZ(100px); /* 最靠前 */
-  background: linear-gradient(135deg, #abcff6 0%, #c4efeb 100%) !important; 
-}
-
-/* sphere-4：右上 (网络安全) */
-.sphere-4 {
-  width: 85px; height: 85px;
-  top: 18%; left: 75%;
-  transform: translateZ(30px);
-  background: linear-gradient(135deg, #fef2f2 0%, #fee4fa 100%) !important; /* 🌟 核心修改：使用同色系渐变替换纯白，更有 AI 玻璃感 */
-}
-
-/* sphere-5：右下 (后端) */
-.sphere-5 {
-  width: 95px; height: 95px;
-  top: 60%; left: 78%;
-  transform: translateZ(10px);
-  background: linear-gradient(135deg, #f0f9eb 0%, #d8f3f3 100%) !important; /* 🌟 核心修改：使用同色系渐变替换纯白，更有 AI 玻璃感 */
-}
-
-/* sphere-6：中左 (数据分析) */
-.sphere-6 {
-  width: 75px; height: 75px;
-  top: 35%; left: 10%;
-  transform: translateZ(-50px); /* 🎨 高级：最远处的球，增加景深感 */
-}
-
-/* sphere-7：中右 (UI/UX) */
-.sphere-7 {
-  width: 80px; height: 80px;
-  top: 38%; left: 85%;
-  transform: translateZ(-40px); /* 🎨 高级：最远处的球，增加景深感 */
-}
-
-/* sphere-8：底部 (运维) */
-.sphere-8 {
-  width: 90px; height: 90px;
-  top: 65%; left: 50%;
-  transform: translateZ(-10px); /* 🎨 高级：最远处的球，增加景深感 */
-}
-
-.sphere-9 {
-  width: 70px; height: 70px;
-  top: 80%; left: 52%;
-  transform: translateZ(-30px); /* 🌟 核心：translateZ 为负值，远景 */
-  opacity: 0.7 !important; /* 🌟 淡出感 */
-}
-
-/* sphere-10：左上偏左 (全栈) */
-.sphere-10 {
-  width: 65px; height: 65px;
-  top: 8%; left: 8%;
-  transform: translateZ(-50px);
-  opacity: 0.6 !important;
-}
-
-/* sphere-11：中右偏下 (移动端) */
-.sphere-11 {
-  width: 72px; height: 72px;
-  top: 50%; left: 92%;
-  transform: translateZ(-60px);
-  opacity: 0.5 !important;
-}
-
-/* sphere-12：顶部偏右 (云计算) */
-.sphere-12 {
-  width: 60px; height: 60px;
-  top: 2%; left: 62%;
-  transform: translateZ(-80px);
-  opacity: 0.4 !important; /* 🌟 最淡 */
-}
-
-/* sphere-13：底部偏左 (架构师) */
-.sphere-13 {
-  width: 75px; height: 75px;
-  top: 78%; left: 28%;
-  transform: translateZ(-40px);
-  opacity: 0.7 !important;
-}
-
-/* sphere-14：底部偏右 (交互设计) */
-.sphere-14 {
-  width: 68px; height: 68px;
-  top: 75%; left: 68%;
-  transform: translateZ(-55px);
-  opacity: 0.6 !important;
-}
-
-/* sphere-15：左中偏下 (游戏开发) */
-.sphere-15 {
-  width: 70px; height: 70px;
-  top: 50%; left: 4%;
-  transform: translateZ(-70px);
-  opacity: 0.5 !important;
-}
-
-/* sphere-16：顶部中央偏左 (IOT) */
-.sphere-16 {
-  width: 62px; height: 62px;
-  top: 3%; left: 32%;
-  transform: translateZ(-90px);
-  opacity: 0.4 !important;
-}
-
-
-
-/* D. 下方原本列表区域的样式修正 (移除了 header) */
-.jobs-list-container {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-/* ======= E. 动画定义 ======= */
-/* 核心：模仿 Mobbin 的轻微随机漂浮感 */
-/* 修改后的更大幅度浮动动画 */
-@keyframes floatRandomly {
-  0% { 
-    transform: translateY(0) rotate(0deg) translateZ(0); 
-  }
-  33% { 
-    /* 向上位移加大，增加左右摇摆 */
-    transform: translateY(-35px) translateX(-10px) rotate(6deg) translateZ(10px); 
-  }
-  66% { 
-    /* 向下位移加大，反向旋转 */
-    transform: translateY(20px) translateX(15px) rotate(-5deg) translateZ(-5px); 
-  }
-  100% { 
-    transform: translateY(0) rotate(0deg) translateZ(0); 
-  }
-}
-
-@keyframes Blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-/* ===== 通用投影补充 ===== */
-:deep(.job-card) {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 4px 20px rgba(80, 152, 249, 0.06),
-    0 1px 4px rgba(0, 0, 0, 0.03) !important;
-}
 
 .home-footer {
   padding: 5px;
@@ -2879,43 +2757,4 @@ const handleResize = () => {
   background: #fff;
 }
 
-/* 🌟 量子背景大团块的缓慢漂移 */
-@keyframes quantumFlow {
-  0% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(180deg) scale(1.1); }
-  100% { transform: rotate(360deg) scale(1); }
-}
-
-/* 🌟 微小粒子的呼吸感和极小的位移 */
-@keyframes particleDrift {
-  0% { 
-    transform: translate(0, 0); 
-    opacity: 0.3;
-  }
-  50% { 
-    transform: translate(-20px, 20px); 
-    opacity: 0.6;
-  }
-  100% { 
-    transform: translate(0, 0); 
-    opacity: 0.3;
-  }
-}
-
-/* 🌟 量子光晕的呼吸效果：让背景颜色深浅交替 */
-@keyframes quantumGlow {
-  0% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
-  100% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
-}
-
-/* 🌟 微小量子的匀速流动：产生“数据流”的视觉感 */
-@keyframes quantumParticles {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    /* 🌟 让背景坐标移动，产生粒子向下流动的错觉 */
-    background-position: 0 1000px;
-  }
-}
 </style>
