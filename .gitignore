@@ -104,3 +104,12 @@ filter_data.txt
 
 # Docker
 .dockerignore
+Dockerfile.backend
+Dockerfile.frontend
+docker-compose.yml
+
+# Generated scripts (keep templates only)
+backend/scripts/seed_ten_jobs.sql
+backend/scripts/sync_*.sql
+backend/scripts/init_neo4j.cypher
+backend/scripts/generate_cypher.py

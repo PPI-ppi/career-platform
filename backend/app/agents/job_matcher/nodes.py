@@ -1,4 +1,9 @@
-"""LangGraph nodes for the Job Matcher agent."""
+"""LangGraph nodes for the Job Matcher agent.
+
+Rewritten: all 10 positions with 7-dimension profiles serve as RAG knowledge base.
+LLM directly scores user profile against each position, then ranks.
+Data cached in Redis for instant access.
+"""
 
 import json
 import logging
@@ -7,23 +12,52 @@ from typing import Dict
 from app.agents.job_matcher.state import JobMatcherState
 from app.agents.job_matcher import db_utils
 from app.agents.job_matcher.scorer import MatchScorer
-from app.agents.job_matcher.job_profiler import extract_job_requirements
 from app.agents.retry import SubModuleTracer
-from app.rag.retrievers import resume_job_matcher
 from app.db.neo4j import neo4j_manager
 
 logger = logging.getLogger(__name__)
+
+# Redis key for the 10-position knowledge base
+KB_CACHE_KEY = "cache:matching:kb"
+KB_CACHE_TTL = 3600
+
+
+async def _load_knowledge_base():
+    """Load 10 positions x 7 dimensions from Redis cache or DB."""
+    # Try Redis first
+    try:
+        from app.db.redis import get_redis
+        r = await get_redis()
+        raw = await r.get(KB_CACHE_KEY)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+
+    # Fallback: load from DB
+    jobs = await db_utils.get_all_jobs_with_profiles()
+
+    # Write to Redis
+    try:
+        from app.db.redis import get_redis
+        r = await get_redis()
+        await r.setex(KB_CACHE_KEY, KB_CACHE_TTL,
+                       json.dumps(jobs, ensure_ascii=False, default=str))
+        logger.info(f"[Match] KB cached to Redis: {len(jobs)} positions")
+    except Exception:
+        pass
+
+    return jobs
 
 
 async def load_user_profile(state: JobMatcherState) -> Dict:
     uid = state["user_id"]
 
-    # If frontend sent profile data (from profileState.js), use it directly
+    # If frontend sent profile data, use it directly
     input_profile = state.get("user_profile", {})
     if input_profile and input_profile.get("source") == "frontend":
         radar = input_profile.get("radar_data", [])
         if radar and any(v > 0 for v in radar):
-            # Also save to DB for future use
             try:
                 await db_utils.save_user_profile(uid, input_profile)
             except Exception:
@@ -39,14 +73,11 @@ async def load_user_profile(state: JobMatcherState) -> Dict:
                 pd = json.loads(pd)
             except Exception:
                 pd = {}
-        # Check if profile has meaningful data (radar_data with non-zero values)
         radar = pd.get("radar_data", [])
         if radar and any(v > 0 for v in radar):
             return {"user_profile": pd}
-        # Profile exists but has no meaningful scores
         return {"user_profile": {}, "error": "用户画像数据为空，请先在「职能助手」中完成对话分析"}
 
-    # If no user profile yet, check if there's one in the state
     if state.get("user_profile"):
         profile_data = state["user_profile"]
         await db_utils.save_user_profile(uid, profile_data)
@@ -56,119 +87,116 @@ async def load_user_profile(state: JobMatcherState) -> Dict:
 
 
 async def retrieve_candidates(state: JobMatcherState) -> Dict:
-    """RAG: use resume text to find top candidate jobs via vector search.
-
-    Retrieves a larger pool (top_k=200) then deduplicates by job_title,
-    keeping one representative per unique title (the closest vector match).
-    Returns up to 10 unique job title IDs.
-    """
-    profile = state.get("user_profile", {})
-    profile_text = json.dumps(profile, ensure_ascii=False)
-
-    # Widen retrieval to cover more unique titles
-    candidate_ids = resume_job_matcher.retrieve_candidates(profile_text, top_k=200)
-    print(f"[Match] RAG returned {len(candidate_ids)} candidate IDs")
-    if not candidate_ids:
-        return {"candidate_job_ids": []}
-
-    # Deduplicate by job_title — keep the first (best vector match) per title
-    details = await db_utils.get_job_details([int(i) for i in candidate_ids])
-    print(f"[Match] DB returned {len(details)} job details for {len(candidate_ids)} IDs")
-    seen_titles: dict[str, str] = {}
-    for job in details:
-        title = (job.get("job_title") or "").strip()
-        if title and title not in seen_titles:
-            seen_titles[title] = str(job["id"])
-        if len(seen_titles) >= 10:
-            break
-
-    print(f"[Match] After dedup: {len(seen_titles)} unique titles: {list(seen_titles.keys())}")
-    return {"candidate_job_ids": list(seen_titles.values())}
+    """Load ALL 10 positions (7-dim profiles) from Redis cache as knowledge base."""
+    jobs = await _load_knowledge_base()
+    print(f"[Match] KB loaded: {len(jobs)} positions")
+    return {
+        "candidate_job_ids": [str(j["id"]) for j in jobs],
+        "all_jobs_with_profiles": jobs,
+    }
 
 
 async def load_job_details(state: JobMatcherState) -> Dict:
-    ids = state.get("candidate_job_ids", [])
-    print(f"[Match] load_job_details: {len(ids)} candidate IDs: {ids[:15]}...")
-    if not ids:
-        # Fallback: user favorites
-        uid = state["user_id"]
-        fav_ids = await db_utils.get_user_favorites(uid)
-        if fav_ids:
-            ids = [str(i) for i in fav_ids]
-
-    if not ids:
+    """Use pre-loaded knowledge base directly."""
+    jobs = state.get("all_jobs_with_profiles", [])
+    if not jobs:
+        ids = state.get("candidate_job_ids", [])
+        if ids:
+            details = await db_utils.get_job_details([int(i) for i in ids])
+            return {"job_details": details}
         return {"job_details": [], "match_results": []}
-
-    details = await db_utils.get_job_details([int(i) for i in ids])
-    return {"job_details": details}
+    return {"job_details": jobs}
 
 
 async def neo4j_enrich(state: JobMatcherState) -> Dict:
-    """Enrich job matching with Neo4j graph profiles.
-
-    Gracefully degrades when Neo4j is unavailable — matching proceeds
-    with RAG + algorithmic scoring only, without graph-based enrichment.
-    """
+    """No-op: 7-dim data from job_profiles supersedes Neo4j."""
     jobs = state.get("job_details", [])
-    profiles = []
-
-    try:
-        session = await neo4j_manager.get_session()
-        if session is None:
-            logger.info("[Match] Neo4j unavailable — skipping graph enrichment, using RAG+scoring only")
-            return {"neo4j_profiles": []}
-        for job in jobs:
-            result = await session.run(
-                "MATCH (jp:JobProfile {title: $title}) RETURN jp",
-                title=job.get("job_title", ""),
-            )
-            record = await result.single()
-            if record:
-                profiles.append(dict(record["jp"]))
-        await session.close()
-        logger.info(f"[Match] Neo4j enriched {len(profiles)}/{len(jobs)} jobs with graph profiles")
-    except Exception as e:
-        logger.warning(f"[Match] Neo4j enrichment failed — continuing without graph data: {e}")
-
-    return {"neo4j_profiles": profiles}
+    logger.info(f"[Match] KB covers {len(jobs)} jobs, skipping Neo4j")
+    return {"neo4j_profiles": []}
 
 
 async def algorithmic_match(state: JobMatcherState) -> Dict:
-    """Match jobs using job_profiler (LLM) + algorithmic scoring."""
-    import asyncio
+    """LLM scores user profile against all 10 positions' 7-dim requirements.
 
-    # Check if there's an error from load_user_profile (no valid profile)
+    Builds a prompt with:
+    - User's 7-dimension profile (radar scores + details)
+    - All 10 positions with their 7-dimension requirements
+    Then asks LLM to score and rank.
+    """
+    import asyncio
+    from app.agents.job_matcher.prompts import build_batch_match_prompt
+    from langchain_openai import ChatOpenAI
+    from app.config import settings
+
     if state.get("error"):
         return {"match_results": []}
 
     profile = state.get("user_profile", {})
     jobs = state.get("job_details", [])
-    logger.info(f"[Match] algorithmic_match: scoring {len(jobs)} jobs: {[j.get('job_title','?') for j in jobs]}")
 
     if not jobs:
         return {"match_results": []}
 
-    # Step 1: Get job requirements for each job (sub-module: job_profiler)
-    profiler_tracer = SubModuleTracer("job_matcher", "job_profiler")
+    # Build prompt with user profile + all 10 positions' 7-dim data
+    prompt = build_batch_match_prompt(profile, jobs)
 
-    async def get_job_requirements(job: dict) -> dict:
-        return await profiler_tracer.run(
-            extract_job_requirements, job,
-            timeout=60, default={},
+    try:
+        llm = ChatOpenAI(
+            model=settings.OPENAI_MODEL,
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_BASE_URL,
+            temperature=0.1,
         )
+        resp = await llm.ainvoke(prompt)
+        content = resp.content if hasattr(resp, "content") else str(resp)
 
-    # Run all job_profiler calls concurrently
-    req_tasks = [get_job_requirements(job) for job in jobs]
-    all_requirements = await asyncio.gather(*req_tasks)
+        # Parse LLM JSON output
+        try:
+            # Strip markdown code fences if present
+            if "```" in content:
+                start = content.find("[")
+                end = content.rfind("]") + 1
+                content = content[start:end]
+            results = json.loads(content)
+        except json.JSONDecodeError:
+            logger.error(f"[Match] LLM returned invalid JSON: {content[:500]}")
+            return {"match_results": []}
 
-    # Step 2: Compute match scores using the scorer
+        # Ensure proper structure
+        match_results = []
+        for r in results:
+            match_results.append({
+                "job_id": r.get("job_id"),
+                "job_title": r.get("job_title", ""),
+                "company": r.get("company", ""),
+                "industry": r.get("industry", ""),
+                "city": r.get("city", ""),
+                "salary_range": r.get("salary_range", ""),
+                "total_score": r.get("total_score", 0),
+                "scores": r.get("scores", {}),
+                "summary": r.get("summary", ""),
+                "recommendations": r.get("recommendations", []),
+            })
+
+        match_results.sort(key=lambda x: x["total_score"], reverse=True)
+        logger.info(f"[Match] LLM scored {len(match_results)} positions: "
+                     f"{[(r['job_title'], r['total_score']) for r in match_results]}")
+        return {"match_results": match_results}
+
+    except Exception as e:
+        logger.error(f"[Match] LLM scoring failed: {e}")
+
+    # Fallback to algorithmic scoring if LLM fails
     scorer = MatchScorer()
     results = []
-    for job, job_reqs in zip(jobs, all_requirements):
+    for job in jobs:
+        profile_data = job.get("profile_data", {})
+        dims = profile_data.get("dimensions", {})
+        # Build job_requirements from 7-dim data
+        job_reqs = _build_job_reqs_from_profile(dims)
         try:
             score_result = scorer.compute_scores(profile, job_reqs, job_info=job)
-        except Exception as e:
-            print(f"[Match] scorer error: {e}")
+        except Exception:
             score_result = {
                 "total_score": 0, "scores": {},
                 "summary": "评分异常", "recommendations": [],
@@ -187,6 +215,31 @@ async def algorithmic_match(state: JobMatcherState) -> Dict:
     return {"match_results": results}
 
 
+def _build_job_reqs_from_profile(dimensions: dict) -> dict:
+    """Convert 7-dimension profile data to scorer-compatible format.
+
+    Input: {"专业技能": ["item1", "item2", ...], "证书要求": [...], ...}
+    Output: {"专业技能": {"expected_score": 70, "requirements": "item1; item2"}, ...}
+    """
+    DIM_MAP = {
+        "专业技能": "专业技能",
+        "证书要求": "证书资质",
+        "创新能力": "创新能力",
+        "学习能力": "学习能力",
+        "抗压能力": "抗压能力",
+        "沟通能力": "沟通能力",
+        "实习能力": "实习/项目经验",
+    }
+    result = {}
+    for src_dim, scorer_dim in DIM_MAP.items():
+        items = dimensions.get(src_dim, [])
+        result[scorer_dim] = {
+            "expected_score": 70,
+            "requirements": "; ".join(items[:3]) if items else "",
+        }
+    return result
+
+
 async def rank_results(state: JobMatcherState) -> Dict:
     results = state.get("match_results", [])
     ranked = sorted(results, key=lambda r: r.get("total_score", 0), reverse=True)
@@ -194,17 +247,21 @@ async def rank_results(state: JobMatcherState) -> Dict:
 
 
 async def save_report(state: JobMatcherState) -> Dict:
+    """Save match results to DB. Errors here must NOT crash the graph."""
     uid = state["user_id"]
     ranked = state.get("ranked_results", [])
 
-    for r in ranked[:5]:  # Top 5
-        await db_utils.save_match_report(
-            user_id=uid,
-            job_name=r.get("job_title", ""),
-            match_score=float(r.get("total_score", 0)),
-            report_data=r,
-            industry=r.get("industry", ""),
-            city=r.get("city", ""),
-        )
+    for r in ranked[:5]:
+        try:
+            await db_utils.save_match_report(
+                user_id=uid,
+                job_name=r.get("job_title", ""),
+                match_score=float(r.get("total_score", 0)),
+                report_data=r,
+                industry=r.get("industry", ""),
+                city=r.get("city", ""),
+            )
+        except Exception as e:
+            logger.warning(f"[Match] save_report failed for {r.get('job_title', '?')}: {e}")
 
     return {"report_id": 0}

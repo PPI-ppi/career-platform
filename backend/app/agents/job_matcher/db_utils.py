@@ -75,17 +75,18 @@ async def save_user_profile(user_id: int, profile_data: dict) -> bool:
 async def save_match_report(user_id: int, job_name: str, match_score: float,
                             report_data: dict, industry: str = "", city: str = "") -> int:
     import json
+    from app.config import settings
+    rd = json.dumps(report_data, ensure_ascii=False)
+    date_expr = "DATE('now')" if settings.DB_BACKEND == "sqlite" else "CURDATE()"
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             text(
-                "INSERT INTO matching_report (user_id, job_name, industry, city, "
-                "match_score, report_data, publish_date) "
-                "VALUES (:uid, :jn, :ind, :ct, :ms, :rd, DATE('now'))"
+                f"INSERT INTO matching_report (user_id, job_name, industry, city, "
+                f"match_score, report_data, publish_date) "
+                f"VALUES (:uid, :jn, :ind, :ct, :ms, :rd, {date_expr})"
             ),
-            {
-                "uid": user_id, "jn": job_name, "ind": industry, "ct": city,
-                "ms": match_score, "rd": json.dumps(report_data, ensure_ascii=False),
-            },
+            {"uid": user_id, "jn": job_name, "ind": industry, "ct": city,
+             "ms": match_score, "rd": rd},
         )
         await db.commit()
     return result.lastrowid
@@ -139,6 +140,38 @@ async def save_selected_job(user_id: int, job_data: dict) -> bool:
         )
         await db.commit()
     return True
+
+
+async def get_all_jobs_with_profiles() -> list[dict]:
+    """Get ALL 10 positions with their 7-dimension profile data."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text(
+                "SELECT j.id, j.job_title, j.company, j.industry, j.city, j.salary_range, "
+                "j.job_description, j.requirements, jp.profile_data "
+                "FROM jobs j LEFT JOIN job_profiles jp ON j.id = jp.job_id "
+                "ORDER BY j.id"
+            )
+        )
+        rows = result.fetchall()
+        jobs = []
+        for r in rows:
+            job = dict(r._mapping)
+            # Parse profile_data JSON
+            pd = job.pop("profile_data", None)
+            if pd:
+                try:
+                    import json
+                    if isinstance(pd, str):
+                        job["profile_data"] = json.loads(pd)
+                    else:
+                        job["profile_data"] = pd
+                except Exception:
+                    job["profile_data"] = {}
+            else:
+                job["profile_data"] = {}
+            jobs.append(job)
+        return jobs
 
 
 async def get_selected_job(user_id: int) -> dict | None:

@@ -219,7 +219,49 @@ const allJobs = ref([])
 const currentPage = ref(1)
 let searchTimer = null
 
+const CACHE_KEY = 'jobExplorer_cache'
+const CACHE_TTL = 30 * 60 * 1000 // 30 分钟有效
+
+function readCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const { data, ts } = JSON.parse(raw)
+    if (Date.now() - ts > CACHE_TTL) return null
+    return data
+  } catch { return null }
+}
+
+function writeCache(data) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }))
+  } catch { /* localStorage 满了就跳过 */ }
+}
+
+const mapJobs = (jobs) => jobs.map((item, index) => ({
+  ...item,
+  id: item.id || index + 1,
+  title: item.job_title || item.title,
+  company: item.company_name || item.company,
+  salary: item.salary_range || item.salary || '面议',
+  scale: item.company_scale || '--',
+  city: item.city || '--',
+  tags: item.industry ? item.industry.split(',') : [],
+  description: item.job_description || item.description,
+}))
+
 const loadJobs = async (reset = true) => {
+  const isDefaultView = !searchQuery.value && selectedTags.value.length === 0
+
+  // 1. 默认视图：先秒显缓存
+  if (reset && isDefaultView) {
+    const cached = readCache()
+    if (cached) {
+      allJobs.value = cached
+    }
+  }
+
+  // 2. 后台拉接口
   try {
     const params = {}
     selectedTags.value.forEach((tag) => {
@@ -230,7 +272,6 @@ const loadJobs = async (reset = true) => {
 
     let data
     if (searchQuery.value) {
-      // Use list endpoint with keyword — supports RAG search + industry/city filters
       const resp = await jobsApi.list({ ...params, keyword: searchQuery.value, page: 1, page_size: 200 })
       data = resp.data
     } else {
@@ -238,25 +279,24 @@ const loadJobs = async (reset = true) => {
       data = resp.data
     }
 
-    const mapped = (data.jobs || []).map((item, index) => ({
-      ...item,
-      id: item.id || index + 1,
-      title: item.job_title || item.title,
-      company: item.company_name || item.company,
-      salary: item.salary_range || item.salary || '面议',
-      scale: item.company_scale || '--',
-      city: item.city || '--',
-      tags: item.industry ? item.industry.split(',') : [],
-      description: item.job_description || item.description,
-    }))
+    const mapped = mapJobs(data.jobs || [])
 
     if (reset) {
       allJobs.value = mapped
     } else {
       allJobs.value = [...allJobs.value, ...mapped]
     }
-  } catch {
-    if (reset) allJobs.value = []
+
+    // 3. 默认视图写缓存
+    if (isDefaultView && mapped.length > 0) {
+      writeCache(mapped)
+    }
+  } catch (err) {
+    console.error('[JobExplorer] loadJobs failed:', err)
+    if (reset && allJobs.value.length === 0) {
+      allJobs.value = []
+    }
+    // 如果有缓存数据，保留不覆盖
   }
 }
 

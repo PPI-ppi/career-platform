@@ -32,6 +32,24 @@ async def lifespan(app: FastAPI):
     import asyncio as _asyncio
     _asyncio.create_task(_ingest_rag_data())
 
+    # Startup: warm Redis caches (non-blocking, delayed to let DB settle)
+    if settings.DB_BACKEND == "mysql":
+        async def _warm_caches():
+            await _asyncio.sleep(3)
+            # 岗位列表缓存
+            try:
+                from app.api.v1.jobs import refresh_jobs_cache
+                await refresh_jobs_cache()
+            except Exception:
+                pass
+            # 人岗匹配知识库 (10岗×7维)
+            try:
+                from app.agents.job_matcher.nodes import _load_knowledge_base
+                await _load_knowledge_base()
+            except Exception:
+                pass
+        _asyncio.create_task(_warm_caches())
+
     yield
 
     # Shutdown

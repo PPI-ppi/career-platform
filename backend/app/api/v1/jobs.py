@@ -1,9 +1,64 @@
+import json
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy import text
 from app.db.mysql import get_db
 from app.rag.retrievers import job_retriever
+from app.config import settings
 
 router = APIRouter()
+
+JOBS_CACHE_KEY = "cache:jobs:list"
+JOBS_CACHE_TTL = 3600  # Redis TTL 兜底，正常靠主动刷新
+
+
+async def refresh_jobs_cache(db=None):
+    """MySQL 写入后调用：立即查 DB 并写回 Redis。"""
+    try:
+        from app.db.redis import get_redis
+        if db is None:
+            from app.db.mysql import AsyncSessionLocal
+            async with AsyncSessionLocal() as session:
+                jobs = await _get_jobs_from_db(session)
+        else:
+            jobs = await _get_jobs_from_db(db)
+        r = await get_redis()
+        await r.setex(JOBS_CACHE_KEY, JOBS_CACHE_TTL, json.dumps(jobs, ensure_ascii=False, default=str))
+    except Exception:
+        pass  # Redis 不可用，请求时自动穿透 DB
+
+
+async def _get_jobs_from_db(db):
+    """从 MySQL 查全部岗位。"""
+    result = await db.execute(
+        text("SELECT id, job_title, company, industry, city, salary_range, company_scale, publish_date, job_description FROM jobs ORDER BY publish_date DESC")
+    )
+    return [dict(r._mapping) for r in result.fetchall()]
+
+
+async def _cached_jobs(db):
+    """Redis 缓存 → 穿透查 DB。"""
+    # 先读 Redis
+    try:
+        from app.db.redis import get_redis
+        r = await get_redis()
+        raw = await r.get(JOBS_CACHE_KEY)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass  # Redis 挂了走 DB
+
+    # 穿透查 DB
+    jobs = await _get_jobs_from_db(db)
+
+    # 写回 Redis
+    try:
+        from app.db.redis import get_redis
+        r = await get_redis()
+        await r.setex(JOBS_CACHE_KEY, JOBS_CACHE_TTL, json.dumps(jobs, ensure_ascii=False, default=str))
+    except Exception:
+        pass
+
+    return jobs
 
 
 @router.get("")
@@ -15,10 +70,9 @@ async def list_jobs(
     city: str = Query(""),
     db=Depends(get_db),
 ):
-    """List jobs with optional keyword filtering. Uses RAG for keyword searches."""
+    """List jobs. RAG keyword search or cached DB list."""
     if keyword:
         results = job_retriever.search(keyword, top_k=200, industry=industry or None, city=city or None)
-        # Deduplicate by job_title, keep highest score per title
         seen = {}
         for r in results:
             title = (r.job_title or "").strip()
@@ -35,22 +89,8 @@ async def list_jobs(
         deduped = sorted(seen.values(), key=lambda x: x["score"], reverse=True)
         return {"success": True, "jobs": deduped[:page_size], "source": "vector"}
 
-    offset = (page - 1) * page_size
-    query = "SELECT id, job_title, company, industry, city, salary_range, company_scale, publish_date, job_description FROM jobs WHERE 1=1"
-    params = {}
-    if industry:
-        query += " AND industry LIKE :ind"
-        params["ind"] = f"%{industry}%"
-    if city:
-        query += " AND city LIKE :ct"
-        params["ct"] = f"%{city}%"
-    query += " ORDER BY publish_date DESC LIMIT :lim OFFSET :off"
-    params["lim"] = page_size
-    params["off"] = offset
-
-    result = await db.execute(text(query), params)
-    jobs = [dict(r._mapping) for r in result.fetchall()]
-    return {"success": True, "jobs": jobs, "source": "sql"}
+    jobs = await _cached_jobs(db)
+    return {"success": True, "jobs": jobs, "source": "redis" if settings.DB_BACKEND == "mysql" else "sql"}
 
 
 @router.get("/search")
