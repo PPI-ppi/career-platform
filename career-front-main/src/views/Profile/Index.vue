@@ -1,28 +1,8 @@
 <template>
   <div class="personal-center">
-    <aside class="sidebar">
-      <div class="avatar-placeholder">
-        <el-avatar :size="80" :src="avatarUrl" />
-      </div>
-     <el-menu :default-active="activeTab" class="menu" @select="handleMenuSelect">
-      <el-menu-item index="info">
-        <el-icon><User /></el-icon>
-        <span>个人信息</span>
-      </el-menu-item>
-      <el-menu-item index="match">
-        <el-icon><Connection /></el-icon>
-        <span>人岗匹配</span>
-      </el-menu-item>
-      <el-menu-item index="favorite" class="menu-item-bottom">
-      <el-icon><Star /></el-icon>
-      <span>我的学习目标</span>
-    </el-menu-item>
-    </el-menu>
-    </aside>
-
-    <main class="main-content">
+<main class="main-content">
       <div class="content-wrapper">
-        
+
         <template v-if="activeTab === 'info'">
           <div v-if="!isInfoFilled" class="ai-chat-layout">
             <div class="chat-dashboard-upper">
@@ -199,7 +179,7 @@ const _moduleState = {
 <script setup>
 import { ref, nextTick, computed, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Upload, Connection, User, TrendCharts, DocumentCopy, Star, MagicStick } from '@element-plus/icons-vue'
+import { Upload, MagicStick } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { learningPlanApi } from '@/api/learningPlan'
 import { matchingApi } from '@/api/matching'
@@ -306,8 +286,6 @@ const loading = ref(false)
 const isStreaming = ref(false)
 const inputValue = ref('')
 const messageListRef = ref(null)
-const avatarUrl = ref('https://ui-avatars.com/api/?name=User&size=120&background=409EFF&color=fff')
-
 const userInfo = ref(_moduleState.userInfo)
 
 // isInfoFilled 不持久化，切回来时显示聊天界面
@@ -407,15 +385,6 @@ onUnmounted(() => {
   _moduleState.currentStepIndex = currentStepIndex.value
   Object.assign(_moduleState.userInfo, userInfo.value)
 })
-
-// 🌟 修复核心：确保菜单选择逻辑能干净地切换 activeTab
-const handleMenuSelect = (index) => {
-  activeTab.value = index
-  // 同步 URL，使浏览器后退能回到正确的 tab
-  const pathMap = { info: '/profile/info', match: '/profile/match', favorite: '/profile/favorites' }
-  const target = pathMap[index]
-  if (target && route.path !== target) router.replace(target)
-}
 
 // 重新填写：清空对话，重置画像
 const handleReset = () => {
@@ -586,158 +555,6 @@ const completionLabel = computed(() => {
     radial-gradient(at 50% 50%, rgba(64, 158, 255, 0.04) 0px, transparent 60%);
 }
 
-/* 侧边栏整体重构 */
-.sidebar {
-  width: 240px;
-  height: calc(100vh - 64px);
-  position: fixed;
-  top: 64px;
-  left: 0;
-  background: linear-gradient(180deg, rgba(249, 249, 249, 0.445) 0%, rgba(218, 234, 251, 0.586) 50%, rgba(255, 255, 255, 0.3) 100%);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
-  border-right: 1px solid rgba(255, 255, 255, 0.4);
-  display: flex;
-  flex-direction: column;
-  transition: all 0.3s ease;
-  z-index: 100;
-  box-shadow: 4px 0 20px rgba(253, 252, 179, 0.06);
-
-  .avatar-placeholder {
-    padding: 20px 0 28px;
-    text-align: center;
-
-    .el-avatar {
-      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.25);
-      border: 3px solid rgba(255, 255, 255, 0.9);
-      transition: all 0.3s ease;
-      &:hover {
-        transform: scale(1.08);
-        box-shadow: 0 12px 32px rgba(102, 126, 234, 0.35);
-      }
-    }
-  }
-
-  /* 菜单样式定制 */
-  .el-menu {
-    border: none;
-    background: transparent;
-    padding: 0 12px 20px;
-    display: flex;
-    flex-direction: column;
-    height: calc(100% - 140px);
-
-    .el-menu-item {
-      height: 48px;
-      line-height: 48px;
-      margin-bottom: 6px;
-      border-radius: 14px;
-      color: #475569;
-      transition: all 0.25s ease;
-      position: relative;
-      overflow: hidden;
-
-      &::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 3px;
-        height: 100%;
-        background: linear-gradient(180deg, #8eb6f1, #fbd7f3);
-        border-radius: 0 4px 4px 0;
-        opacity: 0;
-        transition: opacity 0.25s ease;
-      }
-
-      :deep(.el-icon) {
-        font-size: 18px;
-        transition: all 0.25s ease;
-      }
-
-      span {
-        font-weight: 500;
-        margin-left: 8px;
-        font-size: 14px;
-      }
-
-      /* 鼠标悬停 */
-      &:hover {
-        background: rgba(185, 224, 249, 0.219) !important;
-        color: #1b4374;
-
-        :deep(.el-icon) {
-          color: #667eea;
-        }
-      }
-
-      /* 激活状态 */
-      &.is-active {
-        background: linear-gradient(135deg, rgba(168, 214, 247, 0.301) 0%, rgba(242, 244, 246, 0.455) 100%) !important;
-        color: #0d284e !important;
-        font-weight: 600;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-
-        &::before {
-          opacity: 1;
-        }
-
-        :deep(.el-icon) {
-          color: #667eea;
-        }
-      }
-
-&.menu-item-bottom {
-  margin-top: auto !important;
-  margin-bottom: 16px;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-
-  span {
-    font-size: 14px;
-    color: #475569;
-    transition: all 0.25s ease;
-  }
-
-  :deep(.el-icon) {
-    font-size: 18px;
-    color: #64748b;
-    transition: all 0.25s ease;
-  }
-
-  &:hover {
-    background: transparent !important;
-    transform: none !important;
-
-    span {
-      color: #667eea !important;
-      font-weight: 600 !important;
-    }
-
-    :deep(.el-icon) {
-      color: #667eea !important;
-    }
-  }
-
-  &.is-active {
-    background: transparent !important;
-    box-shadow: none !important;
-
-    span {
-      color: #4f46e5 !important;
-      font-weight: 700 !important;
-    }
-
-    :deep(.el-icon) {
-      color: #4f46e5 !important;
-      font-size: 20px !important;
-    }
-  }
-}
-    }
-  }
-}
 
 /* 找到 .chat-section 下的 .chat-header 样式进行替换 */
 .chat-header {
@@ -841,7 +658,6 @@ const completionLabel = computed(() => {
 /* 增强主内容区的呼吸感 */
 .main-content {
   flex: 1;
-  margin-left: 240px;
   min-width: 0;
   padding: 24px;
   padding-top: 88px;
@@ -853,7 +669,7 @@ const completionLabel = computed(() => {
     content: "";
     position: fixed;
     top: 64px;
-    left: 260px;
+    left: 0;
     right: 0;
     bottom: 0;
     background:

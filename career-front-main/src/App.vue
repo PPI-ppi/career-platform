@@ -27,7 +27,19 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <router-link to="/profile" class="nav-link">个人中心</router-link>
+        <el-dropdown class="nav-link-dropdown" trigger="hover" placement="bottom" @command="handleNavCommand">
+          <span class="nav-link nav-dropdown-trigger">
+            个人中心
+            <el-icon class="dropdown-arrow"><arrow-down /></el-icon>
+          </span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="/profile/info">个人信息</el-dropdown-item>
+              <el-dropdown-item command="/profile/match">能力对标</el-dropdown-item>
+              <el-dropdown-item command="/profile/favorites">我的学习目标</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
       
       <div class="navbar-right">
