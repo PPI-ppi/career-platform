@@ -151,7 +151,7 @@ let _cachedResults = null
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { School, Message, MagicStick, Refresh, DataAnalysis, Aim, User } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { currentRadarData, dimensionDetailsRaw } from './profileState.js'
+import { currentRadarData, dimensionDetailsRaw, loadProfileFromBackend } from './profileState.js'
 import { diagnosisApi } from '@/api/diagnosis'
 import InteractiveLoading from '@/components/InteractiveLoading.vue'
 
@@ -477,6 +477,9 @@ watch([currentRadarData, dimensionDetailsRaw], async () => {
 
 onMounted(async () => {
   window.addEventListener('resize', handleResize)
+
+  // 从后端 MySQL 恢复用户画像（页面刷新后可用）
+  await loadProfileFromBackend()
 
   // 检查模块级缓存
   if (_cachedResults && _cachedHash === computeHash()) {
