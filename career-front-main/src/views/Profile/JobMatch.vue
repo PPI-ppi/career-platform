@@ -283,11 +283,7 @@ const startMatch = async () => {
   rankedResults.value = []
   selectedIndex.value = 0
 
-  // 每次对标自动清除旧锁定
-  lockedJobKey.value = ''
-  hasMatchData.value = false
-  parentSelectedJob.value = null
-  matchingApi.clearSelectedJob().catch(() => {})
+  // 不清除旧锁定 — 让用户手动切换
 
   clearCache()
   // 清除成长追踪缓存，触发重新加载

@@ -17,9 +17,20 @@ async def _save_user_profile(user_id: int, result: dict):
     if not result.get("success") or not result.get("data"):
         return
     data = result["data"]
-    radar = data.get("radar_data") or data.get("radar")
-    details = data.get("dimension_details") or data.get("details")
-    if not radar:
+    # agent returns user_profile dict OR skill_analysis list OR top-level radar_data
+    radar = (data.get("radar_data") or data.get("radar")
+             or data.get("skill_analysis"))
+    details = (data.get("dimension_details") or data.get("details")
+               or (data.get("user_profile", {}).get("dimension_details")))
+    # user_profile may contain the dimension_details as sub-keys
+    up = data.get("user_profile", {})
+    if isinstance(up, dict) and not details:
+        # extract dimension_details from user_profile sub-keys
+        detail_keys = {"专业技能", "创新能力", "学习能力", "实习能力", "抗压能力", "沟通能力", "证书"}
+        extracted = {k: v for k, v in up.items() if k in detail_keys}
+        if extracted:
+            details = extracted
+    if not radar and not details:
         return
     profile = {
         "radar_data": radar,

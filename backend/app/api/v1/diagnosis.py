@@ -1,11 +1,15 @@
 import asyncio
+import json
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Dict, List, Optional
+from sqlalchemy import text
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.agents.llm_factory import get_llm
 from app.middleware.auth import get_current_user
+from app.db.mysql import AsyncSessionLocal
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +25,27 @@ class DiagnosisRequest(BaseModel):
 
 @router.post("/generate")
 async def generate_diagnosis(req: DiagnosisRequest, user: dict = Depends(get_current_user)):
-    """Generate a 300-400 word AI diagnosis report based on profile analysis."""
+    """Generate diagnosis report. Returns cached result if profile hasn't changed."""
     details = req.dimension_details or {}
     radar = req.radar_data
+
+    # 检查是否有缓存报告且数据没变
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("SELECT report_text FROM user_reports WHERE user_id = :uid"),
+                {"uid": user["user_id"]},
+            )
+            row = result.fetchone()
+            if row:
+                try:
+                    cached = json.loads(row[0])
+                    if cached.get("radar_data") == radar:
+                        return {"success": True, "report": cached.get("report", ""), "cached": True}
+                except (json.JSONDecodeError, TypeError):
+                    pass
+    except Exception:
+        pass
 
     # Build dimension summary for the prompt
     dim_summary = []
@@ -93,4 +115,47 @@ async def generate_diagnosis(req: DiagnosisRequest, user: dict = Depends(get_cur
         report = report.replace(char, '')
     report = report.replace('\n\n\n', '\n\n').strip()
 
+    # 自动保存到 MySQL user_reports（含雷达数据，恢复时无需重跑诊断）
+    try:
+        async with AsyncSessionLocal() as db:
+            date_expr = "DATE('now')" if settings.DB_BACKEND == "sqlite" else "NOW()"
+            full_data = json.dumps({
+                "report": report,
+                "radar_data": req.radar_data,
+                "dimension_details": details,
+            }, ensure_ascii=False)
+            await db.execute(
+                text(f"INSERT INTO user_reports (user_id, report_text, created_at) "
+                     f"VALUES (:uid, :rt, {date_expr}) "
+                     f"ON DUPLICATE KEY UPDATE report_text = :rt2, created_at = {date_expr}"),
+                {"uid": user["user_id"], "rt": full_data, "rt2": full_data},
+            )
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"[Diagnosis] Failed to save report: {e}")
+
     return {"success": True, "report": report}
+
+
+@router.get("/report")
+async def get_report(user: dict = Depends(get_current_user)):
+    """Return saved diagnosis report + profile data from DB (no LLM call)."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("SELECT report_text, created_at FROM user_reports WHERE user_id = :uid"),
+            {"uid": user["user_id"]},
+        )
+        row = result.fetchone()
+    if not row:
+        return {"success": True, "data": None}
+    raw = row[0]
+    data = {"report": "", "radar_data": [], "dimension_details": {}, "created_at": str(row[1])}
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            data["report"] = parsed.get("report", raw)
+            data["radar_data"] = parsed.get("radar_data", [])
+            data["dimension_details"] = parsed.get("dimension_details", {})
+        except (json.JSONDecodeError, TypeError):
+            data["report"] = raw
+    return {"success": True, "data": data}

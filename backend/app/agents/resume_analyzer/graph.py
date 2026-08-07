@@ -37,7 +37,6 @@ class ResumeAnalyzerAgent(AgentBase):
         builder.add_node("process_image", nodes.process_image)
         builder.add_node("integrate_info", nodes.integrate_info)
         builder.add_node("extract_params", nodes.extract_params)
-        builder.add_node("check_completeness", nodes.check_completeness)
         builder.add_node("generate_question", nodes.generate_question)
         builder.add_node("analyze_profile", nodes.analyze_profile)
         builder.add_node("generate_report", nodes.generate_report)
@@ -47,10 +46,10 @@ class ResumeAnalyzerAgent(AgentBase):
         builder.add_edge("process_file", "process_image")
         builder.add_edge("process_image", "integrate_info")
         builder.add_edge("integrate_info", "extract_params")
-        builder.add_edge("extract_params", "check_completeness")
 
+        # extract_params → route by check_completeness (routing fn only, not a node)
         builder.add_conditional_edges(
-            "check_completeness",
+            "extract_params",
             nodes.check_completeness,
             {
                 "generate_question": "generate_question",

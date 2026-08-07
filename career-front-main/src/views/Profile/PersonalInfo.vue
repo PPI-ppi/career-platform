@@ -408,14 +408,20 @@ const buildFromProfileData = async (forceApi = false) => {
   cloudItems.sort((a, b) => b.value - a.value)
   wordCloudData.value = cloudItems.slice(0, 8)
 
-  // AI 诊断报告 — 调用 diagnosis 智能体，生成300-400字深度分析
+  // AI 诊断报告 — 先读缓存，没有再调 LLM
   try {
-    const { data: res } = await diagnosisApi.generate({
-      radar_data: skillRadarData.value,
-      dimension_details: details || {},
-    })
-    analysisReport.value = res?.report || res?.data?.report || ''
-    if (!analysisReport.value) throw new Error('Empty report')
+    // 优先从后端缓存读取
+    const { data: cached } = await diagnosisApi.getReport()
+    if (cached?.data?.report) {
+      analysisReport.value = cached.data.report
+    } else {
+      const { data: res } = await diagnosisApi.generate({
+        radar_data: skillRadarData.value,
+        dimension_details: details || {},
+      })
+      analysisReport.value = res?.report || res?.data?.report || ''
+      if (!analysisReport.value) throw new Error('Empty report')
+    }
   } catch (e) {
     console.warn('[Diagnosis] API failed, using fallback:', e?.message)
     const analyzed = DIM_NAMES.filter(d => details?.[d]?.status === '已分析')
@@ -440,6 +446,17 @@ const buildFromProfileData = async (forceApi = false) => {
     if (!report) report = '请在AI 学习导师中提供更多个人信息以生成诊断报告。'
     analysisReport.value = report
   }
+
+  // 写入 sessionStorage（刷新后秒恢复）
+  try {
+    sessionStorage.setItem('diagnosis_cache', JSON.stringify({ hash, results: {
+      analysisReport: analysisReport.value,
+      skillRadarData: [...skillRadarData.value],
+      competitivenessScore: competitivenessScore.value,
+      wordCloudData: [...wordCloudData.value],
+      displayPercentage: displayPercentage.value,
+    }}))
+  } catch { /* ignore */ }
 
   // 写入模块级缓存
   _cachedHash = hash
@@ -478,18 +495,51 @@ watch([currentRadarData, dimensionDetailsRaw], async () => {
 onMounted(async () => {
   window.addEventListener('resize', handleResize)
 
-  // 从后端 MySQL 恢复用户画像（页面刷新后可用）
   await loadProfileFromBackend()
 
-  // 检查模块级缓存
+  // 1) MySQL 后端有已保存报告 → 直接读（换设备同账号复用）
+  try {
+    const { data: repData } = await diagnosisApi.getReport()
+    const saved = repData?.data
+    if (saved?.report) {
+      if (saved.radar_data?.length && !currentRadarData.value.some(v => v > 0)) {
+        currentRadarData.value = saved.radar_data
+        if (saved.dimension_details) dimensionDetailsRaw.value = saved.dimension_details
+      }
+      analysisReport.value = saved.report
+      skillRadarData.value = [...currentRadarData.value]
+      const scores = currentRadarData.value.filter(v => v > 0)
+      competitivenessScore.value = scores.length ? Math.round(scores.reduce((a,b) => a+b, 0) / scores.length) : 0
+      // 阻止 watch 触发重新诊断
+      _cachedHash = computeHash()
+      loading.value = false
+      reportStatus.value = 'ready'
+      await nextTick(); initRadarChart(); initCompletenessChart(); initWordCloud()
+      return
+    }
+  } catch { }
+
+  // 2) sessionStorage 缓存（同设备刷新秒恢复）
+  try {
+    const raw = sessionStorage.getItem('diagnosis_cache')
+    if (raw && currentRadarData.value.some(v => v > 0)) {
+      const cache = JSON.parse(raw)
+      if (cache.results) {
+        applyCached(cache.results)
+        loading.value = false
+        reportStatus.value = 'ready'
+        await nextTick(); initRadarChart(); initCompletenessChart(); initWordCloud()
+        return
+      }
+    }
+  } catch { }
+
+  // 3) 模块级缓存（SPA 切换 tab）
   if (_cachedResults && _cachedHash === computeHash()) {
     applyCached(_cachedResults)
     loading.value = false
     reportStatus.value = 'ready'
-    await nextTick()
-    initRadarChart()
-    initCompletenessChart()
-    initWordCloud()
+    await nextTick(); initRadarChart(); initCompletenessChart(); initWordCloud()
     return
   }
 

@@ -210,7 +210,7 @@ import PersonalInfo from './PersonalInfo.vue'
 import FavoriteJobs from './FavoriteJobs.vue'
 import JobMatch from './JobMatch.vue'
 import RadarChart from '../../components/RadarChart.vue'
-import { currentRadarData, dimensionDetailsRaw, dimensionDetails } from './profileState.js'
+import { currentRadarData, dimensionDetailsRaw, dimensionDetails, loadProfileFromBackend } from './profileState.js'
 const attachedFile = ref(null) // 存储文件对象
 const fileExtractedText = ref('') // 从文件中提取的文本
 const fileParsing = ref(false) // 文件解析中
@@ -371,13 +371,16 @@ const initChatGreeting = async () => {
 }
 
 onMounted(async () => {
+  // 先从 MySQL 恢复画像（等异步完成再判断）
+  await loadProfileFromBackend()
+
   // 如果已有画像数据（雷达图有非零值），直接展示填写完的界面
   if (currentRadarData.value && currentRadarData.value.some(v => v > 0)) {
     isInfoFilled.value = true
   }
 
-  // 已有聊天记录则跳过问候
-  if (chatMessages.value.length === 0) {
+  // 没有画像才走对话流程
+  if (!isInfoFilled.value && chatMessages.value.length === 0) {
     initChatGreeting()
   }
   // 检查后端是否有锁定岗位（而非仅看 sessionStorage 缓存）

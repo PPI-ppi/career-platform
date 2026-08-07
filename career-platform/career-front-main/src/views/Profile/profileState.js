@@ -14,20 +14,24 @@ export const dimensionDetails = computed(() => {
 
 // 页面刷新后从后端 MySQL 恢复用户画像数据
 export async function loadProfileFromBackend() {
+  const hasData = currentRadarData.value.some(v => v > 0)
+  console.log('[Profile] 尝试从MySQL恢复... hasData=', hasData)
+  if (hasData) return
   try {
     const { data } = await api.get('/resume/profile')
-    const profile = data?.data
-    if (profile?.radar_data && profile.radar_data.some(v => v > 0)) {
+    console.log('[Profile] API返回:', JSON.stringify(data))
+    const profile = data.data
+    if (profile && profile.radar_data && profile.radar_data.some(v => v > 0)) {
       currentRadarData.value = profile.radar_data
       dimensionDetailsRaw.value = profile.dimension_details || null
+      console.log('[Profile] 从MySQL恢复画像成功')
+    } else {
+      console.log('[Profile] MySQL中无画像数据')
     }
-  } catch {
-    // 首次使用，忽略
+  } catch (err) {
+    console.error('[Profile] 加载画像失败:', err)
   }
 }
-
-// 模块加载时立即自动恢复 — 比组件 onMounted 更早
-loadProfileFromBackend()
 
 export function bumpMatchVersion() {
   matchVersion.value++

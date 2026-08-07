@@ -267,7 +267,9 @@ const normalizeTasks = (tasks) => {
 
 const isCacheValid = (cacheKey) => {
   const cached = loadFromCache()
-  if (!cached || !cached.cacheKey) return false
+  if (!cached || !cached.cacheKey || !cached.todoList?.length) return false
+  // 5分钟内的缓存直接用，不重拉
+  if (Date.now() - cached.timestamp < 5 * 60 * 1000) return true
   return cached.cacheKey === cacheKey && cached.matchVersion === matchVersion.value
 }
 
