@@ -435,6 +435,7 @@ onMounted(async () => {
     const { data } = await matchingApi.getSelectedJob()
     if (data && data.success && data.data) {
       hasMatchData.value = true
+      targetPosition.value = data.data.job_title || data.data.job_name || ''
     }
   } catch { /* ignore */ }
 
@@ -443,6 +444,7 @@ onMounted(async () => {
     return
   }
 
+  // 用锁定的岗位名做 key（而非空字符串）
   const cacheKey = generateCacheKey(currentRadarData.value, targetPosition.value)
   if (isCacheValid(cacheKey)) {
     restoreFromCache()
