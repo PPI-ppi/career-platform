@@ -107,83 +107,65 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   Document, EditPen, Warning, ChatDotRound,
   DataAnalysis, TrendCharts, Close, ArrowRight
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import api from '@/api/client'
 
-// --- 指标数据 ---
-const metrics = [
-  { icon: Document, value: '32', label: '总提交次数', bg: 'rgba(64, 158, 255, 0.1)' },
-  { icon: EditPen, value: '4.6', label: '平均反馈评级', bg: 'rgba(16, 185, 129, 0.1)' },
-  { icon: Warning, value: '并发锁', label: '高频薄弱点', bg: 'rgba(245, 158, 11, 0.1)' },
-  { icon: ChatDotRound, value: '5天', label: '连续主动求助', bg: 'rgba(139, 92, 246, 0.1)' },
-]
+// --- 指标数据（从后端拉取）---
+const metrics = ref([
+  { icon: Document, value: '--', label: '总提交次数', bg: 'rgba(64, 158, 255, 0.1)' },
+  { icon: EditPen, value: '--', label: '平均匹配评分', bg: 'rgba(16, 185, 129, 0.1)' },
+  { icon: Warning, value: '--', label: '最大薄弱维度', bg: 'rgba(245, 158, 11, 0.1)' },
+  { icon: ChatDotRound, value: '--', label: '连续活跃天数', bg: 'rgba(139, 92, 246, 0.1)' },
+])
 
 // --- 薄弱点标签 ---
-const weakTags = [
-  { text: '高并发锁机制', highlight: true },
-  { text: 'WebAssembly', highlight: false },
-  { text: '分布式事务', highlight: false },
-  { text: '模型微调', highlight: false },
-  { text: 'RAG 工程', highlight: false },
-  { text: '数据驱动决策', highlight: false },
-  { text: 'A/B 实验', highlight: false },
-  { text: '零信任架构', highlight: false },
-  { text: '漏洞挖掘', highlight: false },
-  { text: '自动化报表', highlight: false },
-  { text: 'AIOps', highlight: false },
-  { text: '用户行为分析', highlight: false },
-  { text: '全链路压测', highlight: false },
-  { text: '动效设计', highlight: false },
-  { text: '跨端框架', highlight: false },
-]
+const weakTags = ref([])
 
 // --- 7 天趋势图 ---
 const trendChartRef = ref(null)
 let trendChart = null
 
-const chartOption = {
-  tooltip: {
-    trigger: 'axis',
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 12,
-    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-    axisPointer: { type: 'cross' },
-  },
-  legend: {
-    data: ['本周评级', '上周评级'],
-    bottom: 0,
-    itemWidth: 12,
-    itemHeight: 8,
-    textStyle: { color: '#94a3b8', fontSize: 11 },
-  },
-  grid: {
-    left: 36,
-    right: 20,
-    top: 24,
-    bottom: 40,
-  },
-  xAxis: {
-    type: 'category',
-    data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-    axisLine: { lineStyle: { color: '#e2e8f0' } },
-    axisLabel: { color: '#94a3b8', fontSize: 11 },
-    axisTick: { show: false },
-  },
-  yAxis: {
-    type: 'value',
-    min: 0,
-    max: 50,
-    splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-    axisLabel: { color: '#94a3b8', fontSize: 11 },
-  },
-  series: [
-    {
-      name: '本周评级',
+const trendXData = reactive(['周一', '周二', '周三', '周四', '周五', '周六', '周日'])
+const trendThisWeek = reactive([0, 0, 0, 0, 0, 0, 0])
+
+function buildChartOption() {
+  return {
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: 'rgba(255,255,255,0.3)',
+      borderRadius: 12,
+      boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+      axisPointer: { type: 'cross' },
+    },
+    legend: {
+      data: ['本周完成数'],
+      bottom: 0,
+      itemWidth: 12,
+      itemHeight: 8,
+      textStyle: { color: '#94a3b8', fontSize: 11 },
+    },
+    grid: { left: 36, right: 20, top: 24, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      data: trendXData.slice(),
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { color: '#94a3b8', fontSize: 11 },
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+      axisLabel: { color: '#94a3b8', fontSize: 11 },
+    },
+    series: [{
+      name: '本周完成数',
       type: 'line',
       smooth: true,
       symbol: 'circle',
@@ -195,31 +177,16 @@ const chartOption = {
           { offset: 1, color: 'rgba(112, 161, 255, 0.02)' },
         ]),
       },
-      data: [32, 28, 35, 30, 40, 38, 42],
-    },
-    {
-      name: '上周评级',
-      type: 'line',
-      smooth: true,
-      symbol: 'diamond',
-      symbolSize: 6,
-      lineStyle: { color: '#e2e8f0', width: 2, type: 'dashed' },
-      areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(226, 232, 240, 0.2)' },
-          { offset: 1, color: 'rgba(226, 232, 240, 0.02)' },
-        ]),
-      },
-      data: [28, 30, 25, 32, 28, 34, 30],
-    },
-  ],
+      data: trendThisWeek.slice(),
+    }],
+  }
 }
 
 const initChart = () => {
   if (!trendChartRef.value) return
   trendChart?.dispose()
   trendChart = echarts.init(trendChartRef.value)
-  trendChart.setOption(chartOption)
+  trendChart.setOption(buildChartOption())
   setTimeout(() => trendChart?.resize(), 50)
 }
 
@@ -227,66 +194,62 @@ const handleResize = () => trendChart?.resize()
 
 // --- 时间线点击控制 ---
 const activeEvent = ref(null)
+const showEvent = (evt) => { activeEvent.value = evt }
 
-const showEvent = (evt) => {
-  activeEvent.value = evt
+const timelineEvents = ref([])
+
+// --- Fetch real data from backend ---
+async function fetchFeedback() {
+  try {
+    const { data } = await api.get('/feedback')
+    if (!data.data) return
+    const d = data.data
+
+    // Metrics
+    if (d.metrics) {
+      metrics.value = metrics.value.map((m, i) => ({
+        ...m,
+        value: d.metrics[i]?.value || '--',
+      }))
+    }
+
+    // Weak tags
+    if (d.weak_tags) {
+      weakTags.value = d.weak_tags.filter(t => t.highlight).concat(
+        d.weak_tags.filter(t => !t.highlight)
+      )
+    }
+
+    // Timeline
+    if (d.events) {
+      timelineEvents.value = d.events.map((e, i) => ({
+        id: i + 1,
+        date: e.date,
+        weekday: e.weekday,
+        title: e.title,
+        type: e.type,
+        status: e.status,
+        problem: e.type === 'task' ? `任务「${e.title}」${e.status === 'completed' ? '已完成' : '待完成'}` : '',
+        suggestion: '',
+        next: '',
+      }))
+    }
+
+    // Trend chart
+    if (d.trend) {
+      d.trend.forEach((v, i) => { if (i < 7) trendThisWeek[i] = v })
+      initChart()
+    }
+  } catch (err) {
+    console.error('[Feedback] fetch failed:', err)
+  }
 }
 
-const timelineEvents = [
-  {
-    id: 1,
-    date: '07-30',
-    weekday: '周三',
-    title: '并发锁机制薄弱点定位',
-    problem: '在"高并发锁机制"相关任务中，提交的答案缺少对死锁场景的分析，未区分互斥锁与读写锁的适用场景，导致在并发场景下批改评分偏低（35/50）。',
-    suggestion: '建议系统学习互斥锁与读写锁的底层实现原理，重点关注 ReentrantLock 与 synchronized 的差异。推荐阅读《Java 并发编程实战》第 5-7 章，并通过线上沙箱模拟死锁排查。',
-    next: '完成分布式锁专题任务，重点练习可重入锁与公平锁的对比分析，并提交一份死锁案例分析报告。',
-  },
-  {
-    id: 2,
-    date: '07-29',
-    weekday: '周二',
-    title: 'RAG 工程实践不足',
-    problem: '在 RAG 检索增强生成任务中，未正确配置向量检索的 top-k 参数，导致召回结果相关度不足。对 LangChain 的 RetrievalQA 链使用不熟练。',
-    suggestion: '建议先理解 RAG 架构的三大组件（检索、增强、生成），重点掌握向量数据库的相似度算法（余弦相似度 vs L2 距离）。',
-    next: '重新完成 RAG 问答系统搭建任务，要求使用不同的 top-k 和 chunk_size 参数进行对比实验。',
-  },
-  {
-    id: 3,
-    date: '07-26',
-    weekday: '周六',
-    title: '分布式事务方案设计',
-    problem: '在分布式事务任务中，选择了 TCC 模式但未考虑空回滚和悬挂问题，缺少幂等性设计，导致方案不够完整。',
-    suggestion: '建议对比学习 TCC、Saga、Seata AT 三种模式的适用场景和优缺点，重点关注 TCC 的幂等性与空回滚控制。',
-    next: '设计一个跨行转账的分布式事务方案，分别用 TCC 和 Saga 两种模式实现，并分析各自的优缺点。',
-  },
-  {
-    id: 4,
-    date: '07-24',
-    weekday: '周四',
-    title: '性能优化方案评估',
-    problem: '在性能优化任务中，只关注了 SQL 层面优化，忽略了缓存策略和连接池配置的优化空间，方案维度不够全面。',
-    suggestion: '建议建立"应用层-中间件层-数据库层"三层优化思维框架，掌握缓存穿透/击穿/雪崩的应对策略。',
-    next: '对在线商城系统进行全链路性能评估，输出涵盖 SQL 优化、缓存策略、连接池配置三个维度的优化报告。',
-  },
-  {
-    id: 5,
-    date: '07-22',
-    weekday: '周二',
-    title: '数据驱动决策分析',
-    problem: '在 A/B 实验分析任务中，仅做了描述性统计，缺少假设检验和置信区间计算，分析结论不够严谨。',
-    suggestion: '建议学习统计假设检验基础（t 检验、卡方检验），掌握 A/B 实验的最小样本量计算和效果评估方法论。',
-    next: '重新分析 A/B 实验数据，在报告中加入假设检验和置信区间，并给出统计学意义上的实验结论。',
-  },
-]
-
 onMounted(() => {
-  nextTick(() => {
-    initChart()
-    window.addEventListener('resize', handleResize)
-  })
+  window.addEventListener('resize', handleResize)
+  fetchFeedback()
+  initChart()
 })
-
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   trendChart?.dispose()

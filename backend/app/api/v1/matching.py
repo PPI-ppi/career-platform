@@ -282,10 +282,10 @@ async def get_job_graph(job_title: str, user: dict = Depends(get_current_user)):
         if session is None:
             return {"success": False, "error": "Neo4j 连接不可用"}
 
-        # Neo4j 标签为中文：岗位、能力维度、核心要求
-        # 关系类型：包含维度、核心要求
+        # Neo4j labels: Position, Dimension, Requirement
+        # Relations: HAS_DIMENSION, HAS_REQUIREMENT
         cypher = """
-            MATCH (j:`岗位`)-[r*1..2]-(m)
+            MATCH (j:Position)-[r*1..2]-(m)
             WHERE j.name = $jobTitle
             RETURN j, r, m LIMIT 300
         """
