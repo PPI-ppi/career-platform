@@ -278,7 +278,11 @@ const dimensionList = computed(() => {
 })
 
 // ==================== 对标逻辑 ====================
+let isMatching = false
+
 const startMatch = async () => {
+  if (isMatching) return  // 防重入：同一时间只跑一次匹配
+  isMatching = true
   loading.value = true
   rankedResults.value = []
   selectedIndex.value = 0
@@ -316,6 +320,7 @@ const startMatch = async () => {
 
     // Guard: no profile data at all → don't call API
     if (!profilePayload.radar_data) {
+      isMatching = false
       ElMessage.warning('请先在「AI 学习导师」中完成对话分析，生成个人画像后再进行对标')
       return
     }
@@ -331,6 +336,7 @@ const startMatch = async () => {
 
     const results = payload.ranked_results || payload.match_results || payload.matches || []
     if (results.length === 0) {
+      isMatching = false
       ElMessage.warning(payload.error || '未找到对标的岗位，请先完善简历信息')
       return
     }
@@ -353,6 +359,7 @@ const startMatch = async () => {
     clearInterval(stepTimer)
     clearInterval(progressTimer)
     loading.value = false
+    isMatching = false
   }
 }
 
@@ -572,8 +579,16 @@ const getProgressColor = (score) => {
 // ==================== 响应式 ====================
 const handleResize = () => radarInstance?.resize()
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('resize', handleResize)
+
+  // 从 MySQL 恢复已锁定的岗位
+  try {
+    const { data } = await matchingApi.getSelectedJob()
+    if (data?.success && data?.data) {
+      lockedJobKey.value = getJobKey(data.data)
+    }
+  } catch { }
 
   // restore cached results if profile hasn't changed
   const cached = loadFromCache()

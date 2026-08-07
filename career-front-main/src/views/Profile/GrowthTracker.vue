@@ -330,7 +330,7 @@ const fetchDailyTasks = async () => {
     const needRetry = (expectedJob && returnedJob && expectedJob !== returnedJob)
       || (!data.daily_tasks || data.daily_tasks.length === 0)
     if (needRetry) {
-      const { data: retry } = await learningPlanApi.dailyTasks({ phase_index: 0, force_refresh: true, _t: Date.now() })
+      const { data: retry } = await learningPlanApi.dailyTasks({ phase_index: 0, _t: Date.now() })
       if (retry.daily_tasks && retry.daily_tasks.length > 0) {
         todoList.value = normalizeTasks(retry.daily_tasks)
         return
@@ -450,7 +450,8 @@ onMounted(async () => {
     return
   }
 
-  await fetchAllDataAndCache(cacheKey)
+  // 后端有缓存直接走，不传 force_refresh
+  await fetchAllDataAndCache(cacheKey, false)
 })
 
 watch(matchVersion, async () => {
@@ -468,7 +469,7 @@ watch(matchVersion, async () => {
   }
 
   const cacheKey = generateCacheKey(currentRadarData.value, targetPosition.value)
-  await fetchAllDataAndCache(cacheKey, true)
+  await fetchAllDataAndCache(cacheKey, false)
 })
 
 watch(currentRadarData, (newVal, oldVal) => {

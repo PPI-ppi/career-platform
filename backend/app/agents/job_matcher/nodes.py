@@ -250,7 +250,9 @@ async def save_report(state: JobMatcherState) -> Dict:
     """Save match results to DB. Errors here must NOT crash the graph."""
     uid = state["user_id"]
     ranked = state.get("ranked_results", [])
+    profile = state.get("user_profile", {})
 
+    # Save each match result
     for r in ranked[:5]:
         try:
             await db_utils.save_match_report(
@@ -263,5 +265,21 @@ async def save_report(state: JobMatcherState) -> Dict:
             )
         except Exception as e:
             logger.warning(f"[Match] save_report failed for {r.get('job_title', '?')}: {e}")
+
+    # Save aggregate record with radar_data for cache-hit check
+    try:
+        await db_utils.save_match_report(
+            user_id=uid,
+            job_name="__all__",
+            match_score=float(ranked[0].get("total_score", 0)) if ranked else 0,
+            report_data={
+                "radar_data": profile.get("radar_data", []),
+                "matches": ranked,
+            },
+            industry="",
+            city="",
+        )
+    except Exception as e:
+        logger.warning(f"[Match] save aggregate failed: {e}")
 
     return {"report_id": 0}

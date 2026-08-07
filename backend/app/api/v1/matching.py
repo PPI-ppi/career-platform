@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re as _re
 from fastapi import APIRouter, Depends
@@ -91,6 +92,27 @@ async def push_career_planner(user_id: int, top_job: dict):
 
 @router.post("/match")
 async def match_jobs(req: MatchRequest = None, user: dict = Depends(get_current_user)):
+    # 画像没变 → 直接返回已保存的匹配结果，不调 LLM
+    if req and req.radar_data and any(v > 0 for v in req.radar_data):
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    text("SELECT report_data FROM matching_report WHERE user_id = :uid "
+                         "AND job_name = '__all__' ORDER BY created_at DESC LIMIT 1"),
+                    {"uid": user["user_id"]},
+                )
+                row = result.fetchone()
+                if row:
+                    saved = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                    print(f"[Match-cache] req.radar={req.radar_data}, saved.radar={saved.get('radar_data')}")
+                    if saved.get("radar_data") == req.radar_data:
+                        matches = saved.get("matches") or saved.get("ranked_results") or []
+                        if matches:
+                            print(f"[Match-cache] HIT: {len(matches)} matches")
+                            return {"success": True, "data": {"matches": matches, "cached": True}, "cached": True}
+        except Exception as e:
+            print(f"[Match-cache] check error: {e}")
+
     input_data = {"user_id": user["user_id"]}
 
     # If frontend sends profile data, use it directly

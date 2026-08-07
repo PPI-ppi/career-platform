@@ -29,7 +29,7 @@ async def generate_diagnosis(req: DiagnosisRequest, user: dict = Depends(get_cur
     details = req.dimension_details or {}
     radar = req.radar_data
 
-    # 检查是否有缓存报告且数据没变
+    # 有缓存报告直接返回，不调 LLM
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
@@ -40,8 +40,7 @@ async def generate_diagnosis(req: DiagnosisRequest, user: dict = Depends(get_cur
             if row:
                 try:
                     cached = json.loads(row[0])
-                    if cached.get("radar_data") == radar:
-                        return {"success": True, "report": cached.get("report", ""), "cached": True}
+                    return {"success": True, "report": cached.get("report", ""), "cached": True}
                 except (json.JSONDecodeError, TypeError):
                     pass
     except Exception:

@@ -478,20 +478,6 @@ const handleResize = () => {
 }
 
 // 监听画像数据变化 — 仅当数据真正改变时才重新分析
-watch([currentRadarData, dimensionDetailsRaw], async () => {
-  const hash = computeHash()
-  if (hash === _cachedHash) return // 数据未变，跳过
-  if (reportStatus.value === 'ready') {
-    reportStatus.value = 'updating'
-    await buildFromProfileData(true)
-    reportStatus.value = 'ready'
-    await nextTick()
-    initRadarChart()
-    initCompletenessChart()
-    initWordCloud()
-  }
-}, { deep: true })
-
 onMounted(async () => {
   window.addEventListener('resize', handleResize)
 

@@ -11,7 +11,7 @@
       </el-menu-item>
       <el-menu-item index="match">
         <el-icon><Connection /></el-icon>
-        <span>能力对标</span>
+        <span>人岗匹配</span>
       </el-menu-item>
       <el-menu-item index="favorite" class="menu-item-bottom">
       <el-icon><Star /></el-icon>
