@@ -48,7 +48,35 @@ async def get_job_details(job_ids: list[int]) -> list[dict]:
 async def save_user_profile(user_id: int, profile_data: dict) -> bool:
     import json
     from app.config import settings
-    pd = json.dumps(profile_data, ensure_ascii=False)
+
+    # 合并模式：读已有画像，新数据覆盖旧数据，但保留旧数据里有而新数据缺失的维度
+    existing = await get_user_profile(user_id)
+    merged = profile_data
+    if existing:
+        old = existing.get("profile_data", {})
+        if isinstance(old, str):
+            try:
+                old = json.loads(old)
+            except Exception:
+                old = {}
+        if isinstance(old, dict) and isinstance(profile_data, dict):
+            merged = dict(old)
+            merged.update(profile_data)
+            # 维度详情合并（保留旧维度有分而新的没有的）
+            old_details = old.get("dimension_details", {}) or {}
+            new_details = profile_data.get("dimension_details", {}) or {}
+            merged_details = dict(old_details)
+            merged_details.update(new_details)
+            merged["dimension_details"] = merged_details
+            # 雷达数据：新的有值则用新的，否则保留旧的
+            old_radar = old.get("radar_data", []) or []
+            new_radar = profile_data.get("radar_data", []) or []
+            if new_radar and any(v > 0 for v in new_radar):
+                merged["radar_data"] = new_radar
+            elif old_radar and any(v > 0 for v in old_radar):
+                merged["radar_data"] = old_radar
+
+    pd = json.dumps(merged, ensure_ascii=False)
     async with AsyncSessionLocal() as db:
         if settings.DB_BACKEND == "sqlite":
             await db.execute(

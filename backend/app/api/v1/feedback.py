@@ -169,6 +169,7 @@ async def get_feedback(user: dict = Depends(get_current_user)):
                  "WHERE user_id = :uid ORDER BY id LIMIT 10"),
             {"uid": uid})
         cur_task_rows = [(r[0], r[1], r[2], "", today) for r in cur_all.fetchall()]
+        print(f"[Feedback] weak_dim_names={weak_dim_names}, tasks={len(cur_task_rows)}")
         if weak_dim_names and cur_task_rows:
             try:
                 llm_feedback = await _generate_feedback_events(profile, weak_dim_names, cur_task_rows)
@@ -331,22 +332,24 @@ async def _generate_feedback_events(profile, weak_dims, task_rows):
     )
     resp = await llm.ainvoke(prompt)
     content = resp.content if hasattr(resp, "content") else str(resp)
+    print(f"[Feedback-LLM] raw len={len(content)}, first 200: {content[:200]}")
 
     # Parse JSON（宽松处理非法转义）
-    import re as _re3
-    # 修复 JSON 中非法转义：把 \x (x不是引号/斜杠/b/f/n/r/t/u) 替换为 \\
-    content = _re3.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', content)
-
     items = []
     try:
         if "```" in content:
             start = content.find("[")
             end = content.rfind("]") + 1
             content = content[start:end]
-        items = json.loads(content)
+        # strict=False 允许 JSON 中非法的转义字符（如 \x）
+        items = json.loads(content, strict=False)
     except json.JSONDecodeError:
         content = content.strip()
-        items = json.loads(content) if content.startswith("[") else []
+        try:
+            items = json.loads(content, strict=False) if content.startswith("[") else []
+        except json.JSONDecodeError:
+            items = []
+    print(f"[Feedback-LLM] parsed items: {len(items)}")
 
     # 用序号对齐真实 task_id（LLM 可能不按输入返回 task_id）
     events = []
