@@ -261,7 +261,7 @@ const normalizeTasks = (tasks) => {
     desc: t.description || t.desc || '',
     time: t.estimated_time || t.time || t.duration || '30',
     difficulty: t.difficulty || t.type || '中等',
-    status: 'pending',
+    status: t.status || 'pending',  // 保留后端真实状态
   }))
 }
 
@@ -345,14 +345,37 @@ const fetchDailyTasks = async () => {
 
 const selectTask = (task) => {
   selectedTask.value = task
-  if (task.status === 'pending') task.status = 'in_progress'
+  if (task.status === 'pending') {
+    task.status = 'in_progress'
+    // 同步到 MySQL，刷新不丢
+    syncTaskStatus(task, 'in_progress')
+  }
   chatHistory.value = []
   nextTick(() => scrollChatToBottom())
   autoIntroduceTask(task)
 }
 
-const completeTask = (task) => {
+const syncTaskStatus = async (task, status) => {
+  try {
+    if (task.id && typeof task.id === 'number') {
+      await learningPlanApi.updateTask(task.id, { status })
+    }
+  } catch (err) {
+    console.error('[GrowthTracker] sync task status failed:', err)
+  }
+}
+
+const completeTask = async (task) => {
+  // 先乐观更新前端
   task.status = 'completed'
+  // 同步到 MySQL，刷新不丢
+  try {
+    if (task.id && typeof task.id === 'number') {
+      await learningPlanApi.completeTask(task.id)
+    }
+  } catch (err) {
+    console.error('[GrowthTracker] completeTask sync failed:', err)
+  }
 }
 
 const autoIntroduceTask = async (task) => {

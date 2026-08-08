@@ -13,34 +13,46 @@ router = APIRouter()
 
 DIM_NAMES = ["专业技能", "创新能力", "学习能力", "实习能力", "抗压能力", "沟通能力", "证书"]
 
-FEEDBACK_PROMPT = """你是一个学习反馈顾问。根据用户的七维能力画像和最近的实训活动，为每个薄弱维度生成具体的反馈。
+FB_CACHE_TTL = 600  # 10 分钟缓存
+
+FEEDBACK_PROMPT = """你是一个学习反馈顾问。根据用户的七维能力画像，对下面的每个任务生成专属的四段反馈。
 
 用户画像：
 {profile_text}
 
-近期任务活动：
-{activity_text}
-
 目标岗位：{target_job}
 
-请对用户在以下薄弱维度上生成反馈，每个维度一条：
+请对以下每个任务生成反馈：
 
-{weak_dims}
+{tasks_text}
 
-每条反馈包含三个字段：
-- dimension: 所属维度名称
-- problem: 问题定位（一句话指出具体薄弱点，引用画像中的技能缺失或任务中的不足）
-- suggestion: 改进建议（具体的行动建议，可引用学习资源）
-- next: 下一步（可执行的下一步任务）
+每个任务返回四个字段：
+- task_id: 任务ID（必须与输入一致）
+- problem: 问题定位（指出完成/攻克这个任务时的具体难点和不足，结合用户画像相关维度）
+- suggestion: 改进建议（针对该任务的具体学习方法或资源）
+- next: 下一步（基于该任务的后续练习或行动）
+- weakness: 薄弱分析（这个任务暴露了用户哪个维度的薄弱点，及该薄弱点的具体表现）
 
 输出一个 JSON 数组，不要包含 markdown 代码块：
-[{{"dimension": "专业技能", "problem": "...", "suggestion": "...", "next": "..."}}]"""
+[{{"task_id": 1, "problem": "...", "suggestion": "...", "next": "...", "weakness": "..."}}]"""
 
 
 @router.get("")
 async def get_feedback(user: dict = Depends(get_current_user)):
     uid = user["user_id"]
     today = date.today()
+
+    cache_key = f"cache:feedback:{uid}"
+
+    # Redis 缓存命中 → 直接返回（10分钟有效）
+    try:
+        from app.db.redis import get_redis
+        r = await get_redis()
+        raw = await r.get(cache_key)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
 
     async with AsyncSessionLocal() as db:
         # === Metrics ===
@@ -92,59 +104,38 @@ async def get_feedback(user: dict = Depends(get_current_user)):
             if score < 80:
                 weak_dim_names.append(name)
 
-        # === Timeline events ===
+        # === Timeline events: task status transitions from task_status_log ===
         events = []
 
-        # 1) Status-transition events from daily_tasks
-        tasks = await db.execute(
-            text("SELECT title, status, description, created_at FROM daily_tasks "
-                 "WHERE user_id = :uid ORDER BY created_at DESC LIMIT 12"),
+        task_logs = await db.execute(
+            text("SELECT task_id, task_title, old_status, new_status, created_at "
+                 "FROM task_status_log WHERE user_id = :uid ORDER BY created_at DESC LIMIT 20"),
             {"uid": uid})
-        task_rows = tasks.fetchall()
+        task_rows = task_logs.fetchall()
         for row in task_rows:
-            title, status, desc, created = row
+            tid, title, old_s, new_s, created = row
             d = _to_date(created)
             wd = _weekday(d)
-            st_label = {"pending": "待开始", "in_progress": "进行中", "completed": "已完成"}.get(status, status)
+            st_label = {"pending": "待开始", "in_progress": "进行中", "completed": "已完成"}.get(new_s, new_s)
             events.append({
                 "date": str(d), "weekday": wd,
-                "title": title,
+                "title": title or f"任务 {tid}",
                 "type": "task",
-                "status": status,
+                "task_id": tid,
+                "status": new_s,
                 "statusLabel": st_label,
-                "problem": desc or f"任务「{title}」当前状态：{st_label}",
-                "suggestion": "",
-                "next": "",
-            })
-
-        # 2) Matching events
-        matches = await db.execute(
-            text("SELECT job_name, match_score, created_at FROM matching_report "
-                 "WHERE user_id = :uid ORDER BY created_at DESC LIMIT 5"),
-            {"uid": uid})
-        for row in matches.fetchall():
-            job_name, score, created = row
-            d = _to_date(created)
-            wd = _weekday(d)
-            events.append({
-                "date": str(d), "weekday": wd,
-                "title": f"人岗匹配 → {job_name}",
-                "type": "match",
-                "status": "completed",
-                "statusLabel": f"{score}分",
-                "problem": f"与「{job_name}」匹配度 {score} 分",
+                "problem": f"任务「{title}」状态变更为{st_label}",
                 "suggestion": "",
                 "next": "",
             })
 
         events.sort(key=lambda e: e["date"], reverse=True)
 
-        # 3) LLM-generated feedback for weak dimensions
-        if weak_dim_names and events:
+        # LLM 反馈单独放（不进时间线，时间线只展示任务状态节点）
+        llm_feedback = []
+        if weak_dim_names:
             try:
-                llm_events = await _generate_feedback_events(profile, weak_dim_names, task_rows)
-                # Prepend LLM events (they come first as strategic feedback)
-                events = llm_events + events
+                llm_feedback = await _generate_feedback_events(profile, weak_dim_names, task_rows)
             except Exception as e:
                 logger.warning(f"[Feedback] LLM generation failed: {e}")
 
@@ -176,7 +167,7 @@ async def get_feedback(user: dict = Depends(get_current_user)):
                 except Exception: pass
             target_job = jd.get("job_title", "") if isinstance(jd, dict) else ""
 
-    return {
+    resp = {
         "success": True,
         "data": {
             "metrics": [
@@ -187,10 +178,21 @@ async def get_feedback(user: dict = Depends(get_current_user)):
             ],
             "weak_tags": weak_tags,
             "trend": trend_data,
-            "events": events[:15],
+            "events": events[:20],
+            "llm_feedback": llm_feedback,
             "target_job": target_job,
         },
     }
+
+    # 写 Redis 缓存（10分钟有效）
+    try:
+        from app.db.redis import get_redis
+        r = await get_redis()
+        await r.setex(cache_key, FB_CACHE_TTL, json.dumps(resp, ensure_ascii=False, default=str))
+    except Exception:
+        pass
+
+    return resp
 
 
 def _to_date(val):
@@ -215,7 +217,7 @@ def _calc_streak(days, today):
 
 
 async def _generate_feedback_events(profile, weak_dims, task_rows):
-    """Use LLM to generate problem/suggestion/next for weak dimensions."""
+    """Use LLM to generate per-task problem/suggestion/next/weakness."""
     from langchain_openai import ChatOpenAI
 
     # Build profile text
@@ -229,21 +231,17 @@ async def _generate_feedback_events(profile, weak_dims, task_rows):
         lines.append(f"- {name}: {score}/100 {desc}")
     profile_text = "\n".join(lines)
 
-    # Build activity text
-    act_lines = []
-    for row in task_rows[:8]:
-        title, status, desc, created = row
-        st = {"pending":"待","in_progress":"进行中","completed":"完成"}.get(status, status)
-        act_lines.append(f"- [{st}] {title}")
-    activity_text = "\n".join(act_lines) if act_lines else "暂无近期活动"
-
-    weak_text = "\n".join(f"- {d}" for d in weak_dims)
+    # Build tasks text from task_status_log rows
+    task_lines = []
+    for row in task_rows[:10]:
+        tid, title, old_s, new_s, created = row
+        task_lines.append(f"- task_id={tid}: {title}")
+    tasks_text = "\n".join(task_lines) if task_lines else "暂无任务"
 
     prompt = FEEDBACK_PROMPT.format(
         profile_text=profile_text,
-        activity_text=activity_text,
+        tasks_text=tasks_text,
         target_job="待定",
-        weak_dims=weak_text,
     )
 
     llm = ChatOpenAI(
@@ -269,16 +267,17 @@ async def _generate_feedback_events(profile, weak_dims, task_rows):
     events = []
     for item in items:
         events.append({
+            "task_id": item.get("task_id"),
             "date": str(date.today()),
             "weekday": _weekday(date.today()),
-            "title": f"{item.get('dimension', '')} — 薄弱点分析",
+            "title": item.get("title", "任务反馈"),
             "type": "feedback",
             "status": "active",
             "statusLabel": "需关注",
             "problem": item.get("problem", ""),
             "suggestion": item.get("suggestion", ""),
             "next": item.get("next", ""),
-            "dimension": item.get("dimension", ""),
+            "weakness": item.get("weakness", ""),
         })
 
     return events

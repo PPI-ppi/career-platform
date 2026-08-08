@@ -603,13 +603,59 @@ async def get_tasks(user: dict = Depends(get_current_user)):
     return {"success": True, "tasks": tasks}
 
 
+async def _log_task_status_change(uid: int, task_id: int, task_title: str,
+                                  old_status: str, new_status: str):
+    """记录任务状态变化，供反馈时间线使用。"""
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text("INSERT INTO task_status_log (user_id, task_id, task_title, old_status, new_status) "
+                     "VALUES (:uid, :tid, :tt, :os, :ns)"),
+                {"uid": uid, "tid": task_id, "tt": task_title,
+                 "os": old_status, "ns": new_status},
+            )
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"[TaskLog] write failed: {e}")
+
+
+async def _get_task_old_status(task_id: int) -> str:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("SELECT status FROM daily_tasks WHERE id = :tid"), {"tid": task_id})
+            row = result.fetchone()
+            return row[0] if row else "pending"
+    except Exception:
+        return "pending"
+
+
 @router.put("/tasks/{task_id}")
 async def update_task(task_id: int, req: TaskUpdateRequest, user: dict = Depends(get_current_user)):
+    old = await _get_task_old_status(task_id)
     await tools.update_task_status(task_id, req.status)
+    if old != req.status:
+        title = await _get_task_title(task_id)
+        await _log_task_status_change(user["user_id"], task_id, title, old, req.status)
     return {"success": True}
 
 
 @router.post("/tasks/{task_id}/complete")
 async def complete_task(task_id: int, user: dict = Depends(get_current_user)):
+    old = await _get_task_old_status(task_id)
     await tools.update_task_status(task_id, "completed")
+    if old != "completed":
+        title = await _get_task_title(task_id)
+        await _log_task_status_change(user["user_id"], task_id, title, old, "completed")
     return {"success": True}
+
+
+async def _get_task_title(task_id: int) -> str:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("SELECT title FROM daily_tasks WHERE id = :tid"), {"tid": task_id})
+            row = result.fetchone()
+            return row[0] if row else ""
+    except Exception:
+        return ""

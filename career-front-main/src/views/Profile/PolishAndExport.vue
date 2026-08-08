@@ -100,6 +100,13 @@
             <div class="popup-section-label">下一步练习</div>
             <div class="popup-section-text">{{ activeEvent.next }}</div>
           </div>
+          <div class="popup-section">
+            <div class="popup-section-label">薄弱分析</div>
+            <div class="popup-section-text">
+              <template v-if="activeEvent.weakness">{{ activeEvent.weakness }}</template>
+              <template v-else>暂无薄弱分析，完成任务后自动生成</template>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -125,6 +132,9 @@ const metrics = ref([
 
 // --- 薄弱点标签 ---
 const weakTags = ref([])
+
+// --- LLM 薄弱分析（每条含 problem/suggestion/next）---
+const llmFeedback = ref([])
 
 // --- 7 天趋势图 ---
 const trendChartRef = ref(null)
@@ -220,19 +230,33 @@ async function fetchFeedback() {
       )
     }
 
-    // Timeline
+    // LLM 薄弱分析（按 task_id 索引，弹窗匹配）
+    const fbByTask = {}
+    if (d.llm_feedback) {
+      llmFeedback.value = d.llm_feedback
+      d.llm_feedback.forEach(fb => {
+        if (fb.task_id) fbByTask[fb.task_id] = fb
+      })
+    }
+
+    // Timeline：合并任务专属反馈
     if (d.events) {
-      timelineEvents.value = d.events.map((e, i) => ({
-        id: i + 1,
-        date: e.date,
-        weekday: e.weekday,
-        title: e.title,
-        type: e.type,
-        status: e.status,
-        problem: e.type === 'task' ? `任务「${e.title}」${e.status === 'completed' ? '已完成' : '待完成'}` : '',
-        suggestion: '',
-        next: '',
-      }))
+      timelineEvents.value = d.events.map((e, i) => {
+        const fb = fbByTask[e.task_id] || {}
+        return {
+          id: i + 1,
+          date: e.date,
+          weekday: e.weekday,
+          title: e.title,
+          type: e.type,
+          status: e.status,
+          task_id: e.task_id,
+          problem: fb.problem || `任务「${e.title}」状态变更为${e.statusLabel || e.status}`,
+          suggestion: fb.suggestion || '完成该任务后，AI将根据表现给出具体建议',
+          next: fb.next || '持续练习，巩固该任务涉及的技能点',
+          weakness: fb.weakness || '',
+        }
+      })
     }
 
     // Trend chart
@@ -463,6 +487,8 @@ onUnmounted(() => {
 /* ===== 右栏：时间线 ===== */
 .right-col {
   display: flex;
+  align-items: stretch;
+  min-height: 0;
 }
 
 .timeline-card {
@@ -470,6 +496,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: 100%;
+  min-height: 540px;
+}
+
+.timeline-banner {
+  flex-shrink: 0;
 }
 .timeline-banner {
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(255, 255, 255, 0.3));
