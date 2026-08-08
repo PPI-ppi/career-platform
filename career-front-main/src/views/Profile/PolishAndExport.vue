@@ -73,6 +73,11 @@
               <div class="tl-content">
                 <span class="tl-date">{{ evt.date }} {{ evt.weekday }}</span>
                 <span class="tl-title">{{ evt.title }}</span>
+                <span v-if="evt.oldStatusLabel" class="tl-transition">
+                  {{ evt.oldStatusLabel }}
+                  <span class="tl-arrow">→</span>
+                  <span :class="['tl-status', `st-${evt.status}`]">{{ evt.statusLabel }}</span>
+                </span>
               </div>
             </div>
           </div>
@@ -250,6 +255,8 @@ async function fetchFeedback() {
           title: e.title,
           type: e.type,
           status: e.status,
+          statusLabel: e.statusLabel || e.status,
+          oldStatusLabel: e.oldStatusLabel || '',
           task_id: e.task_id,
           problem: fb.problem || `任务「${e.title}」状态变更为${e.statusLabel || e.status}`,
           suggestion: fb.suggestion || '完成该任务后，AI将根据表现给出具体建议',
@@ -588,6 +595,26 @@ onUnmounted(() => {
   font-weight: 600;
   color: #1e293b;
   line-height: 1.4;
+}
+.tl-transition {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.tl-arrow {
+  color: #667eea;
+  font-weight: 700;
+}
+.tl-status {
+  font-weight: 600;
+}
+.tl-status.st-in_progress {
+  color: #f59e0b;
+}
+.tl-status.st-completed {
+  color: #10b981;
 }
 
 /* ========== 悬停浮窗 ========== */

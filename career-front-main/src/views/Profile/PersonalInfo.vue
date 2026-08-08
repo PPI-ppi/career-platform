@@ -327,6 +327,34 @@ const applyCached = (cache) => {
   displayPercentage.value = cache.displayPercentage
 }
 
+// 从画像 dimension_details 生成词云关键词（供恢复后展示）
+const buildWordCloudFromProfile = () => {
+  const radar = currentRadarData.value || []
+  const details = dimensionDetailsRaw.value || {}
+  const GENERIC = new Set([
+    '创新能力','学习能力','专业技能','实习能力','抗压能力','沟通能力','证书',
+    '暂无信息','暂无相关信息','根据关联维度推断','未提及','已分析','待补充',
+    '能力','基础','一定','较好','较强','丰富','方面','掌握','熟悉','了解','使用','进行',
+  ])
+  const items = []
+  const seen = new Set()
+  DIM_NAMES.forEach((dim, i) => {
+    const d = details[dim]
+    const score = d?.score || radar[i] || 0
+    if (!d || d.status !== '已分析' || score === 0) return
+    const desc = d.desc || ''
+    desc.split(/[,，、\s;；。、]+/).forEach(k => {
+      const clean = k.replace(/[。.（）()：:]/g, '').trim()
+      if (clean.length >= 2 && clean.length <= 10 && !GENERIC.has(clean) && !seen.has(clean)) {
+        seen.add(clean)
+        items.push({ name: clean, value: score })
+      }
+    })
+  })
+  items.sort((a, b) => b.value - a.value)
+  wordCloudData.value = items.slice(0, 8)
+}
+
 const refreshDiagnosis = async () => {
   loading.value = true
   reportStatus.value = 'updating'
@@ -496,6 +524,13 @@ onMounted(async () => {
       skillRadarData.value = [...currentRadarData.value]
       const scores = currentRadarData.value.filter(v => v > 0)
       competitivenessScore.value = scores.length ? Math.round(scores.reduce((a,b) => a+b, 0) / scores.length) : 0
+      // 画像完整度 = 已分析维度 / 7
+      if (dimensionDetailsRaw.value) {
+        const analyzed = Object.values(dimensionDetailsRaw.value).filter(d => d?.status === '已分析').length
+        displayPercentage.value = Math.round((analyzed / 7) * 100)
+      }
+      // 生成词云数据（画像恢复后也要显示）
+      buildWordCloudFromProfile()
       // 阻止 watch 触发重新诊断
       _cachedHash = computeHash()
       loading.value = false

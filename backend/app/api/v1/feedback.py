@@ -13,7 +13,7 @@ router = APIRouter()
 
 DIM_NAMES = ["专业技能", "创新能力", "学习能力", "实习能力", "抗压能力", "沟通能力", "证书"]
 
-FB_CACHE_TTL = 600  # 10 分钟缓存
+FB_CACHE_TTL = 60  # 60 秒缓存，任务状态更新后能较快看到新反馈
 
 FEEDBACK_PROMPT = """你是一个学习反馈顾问。根据用户的七维能力画像，对下面的每个任务生成专属的四段反馈。
 
@@ -119,26 +119,59 @@ async def get_feedback(user: dict = Depends(get_current_user)):
                 continue
             d = _to_date(created)
             wd = _weekday(d)
-            st_label = {"pending": "待开始", "in_progress": "进行中", "completed": "已完成"}.get(new_s, new_s)
+            old_label = {"pending": "待开始", "in_progress": "进行中", "completed": "已完成"}.get(old_s, old_s)
+            new_label = {"pending": "待开始", "in_progress": "进行中", "completed": "已完成"}.get(new_s, new_s)
             events.append({
                 "date": str(d), "weekday": wd,
                 "title": title or f"任务 {tid}",
                 "type": "task",
                 "task_id": tid,
                 "status": new_s,
-                "statusLabel": st_label,
-                "problem": f"任务「{title}」状态变更为{st_label}",
+                "statusLabel": new_label,
+                "oldStatus": old_s,
+                "oldStatusLabel": old_label,
+                "problem": f"任务「{title}」状态由{old_label}变为{new_label}",
                 "suggestion": "",
                 "next": "",
             })
 
+        # 兜底：从 daily_tasks 当前状态补充进行中/已完成节点（无日志时也能显示）
+        if not events:
+            cur_tasks = await db.execute(
+                text("SELECT id, title, status FROM daily_tasks "
+                     "WHERE user_id = :uid AND status IN ('in_progress','completed') "
+                     "ORDER BY id"),
+                {"uid": uid})
+            for row in cur_tasks.fetchall():
+                tid, title, status = row
+                label = {"in_progress": "进行中", "completed": "已完成"}.get(status, status)
+                events.append({
+                    "date": str(today), "weekday": _weekday(today),
+                    "title": title or f"任务 {tid}",
+                    "type": "task",
+                    "task_id": tid,
+                    "status": status,
+                    "statusLabel": label,
+                    "oldStatus": "pending",
+                    "oldStatusLabel": "待开始",
+                    "problem": f"任务「{title}」状态为{label}",
+                    "suggestion": "",
+                    "next": "",
+                })
+
         events.sort(key=lambda e: e["date"], reverse=True)
 
-        # LLM 反馈单独放（不进时间线，时间线只展示任务状态节点）
+        # LLM 反馈：基于 daily_tasks 当前任务生成（而非 task_status_log，可能为空）
         llm_feedback = []
-        if weak_dim_names:
+        # 收集进行中/已完成任务（或全部任务）
+        cur_all = await db.execute(
+            text("SELECT id, title, status FROM daily_tasks "
+                 "WHERE user_id = :uid ORDER BY id LIMIT 10"),
+            {"uid": uid})
+        cur_task_rows = [(r[0], r[1], r[2], "", today) for r in cur_all.fetchall()]
+        if weak_dim_names and cur_task_rows:
             try:
-                llm_feedback = await _generate_feedback_events(profile, weak_dim_names, task_rows)
+                llm_feedback = await _generate_feedback_events(profile, weak_dim_names, cur_task_rows)
             except Exception as e:
                 logger.warning(f"[Feedback] LLM generation failed: {e}")
 
@@ -275,10 +308,12 @@ async def _generate_feedback_events(profile, weak_dims, task_rows):
         lines.append(f"- {name}: {score}/100 {desc}")
     profile_text = "\n".join(lines)
 
-    # Build tasks text from task_status_log rows
+    # Build tasks text from task_status_log rows（保留真实 task_id 顺序）
     task_lines = []
+    real_ids = []
     for row in task_rows[:10]:
         tid, title, old_s, new_s, created = row
+        real_ids.append(tid)
         task_lines.append(f"- task_id={tid}: {title}")
     tasks_text = "\n".join(task_lines) if task_lines else "暂无任务"
 
@@ -313,10 +348,12 @@ async def _generate_feedback_events(profile, weak_dims, task_rows):
         content = content.strip()
         items = json.loads(content) if content.startswith("[") else []
 
+    # 用序号对齐真实 task_id（LLM 可能不按输入返回 task_id）
     events = []
-    for item in items:
+    for idx, item in enumerate(items):
+        real_tid = real_ids[idx] if idx < len(real_ids) else item.get("task_id")
         events.append({
-            "task_id": item.get("task_id"),
+            "task_id": real_tid,
             "date": str(date.today()),
             "weekday": _weekday(date.today()),
             "title": item.get("title", "任务反馈"),

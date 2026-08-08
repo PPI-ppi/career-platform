@@ -617,6 +617,13 @@ async def _log_task_status_change(uid: int, task_id: int, task_title: str,
             await db.commit()
     except Exception as e:
         logger.warning(f"[TaskLog] write failed: {e}")
+    # 清除反馈缓存，让新状态立即体现
+    try:
+        from app.db.redis import get_redis
+        r = await get_redis()
+        await r.delete(f"cache:feedback:{uid}")
+    except Exception:
+        pass
 
 
 async def _get_task_old_status(task_id: int) -> str:
