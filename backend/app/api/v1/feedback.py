@@ -161,20 +161,39 @@ async def get_feedback(user: dict = Depends(get_current_user)):
 
         events.sort(key=lambda e: e["date"], reverse=True)
 
-        # LLM 反馈：基于 daily_tasks 当前任务生成（而非 task_status_log，可能为空）
+        # LLM 反馈：优先读独立缓存（任务没变就不重新生成，防止内容丢失）
+        llm_cache_key = f"cache:feedback_llm:{uid}"
         llm_feedback = []
-        # 收集进行中/已完成任务（或全部任务）
-        cur_all = await db.execute(
-            text("SELECT id, title, status FROM daily_tasks "
-                 "WHERE user_id = :uid ORDER BY id LIMIT 10"),
-            {"uid": uid})
-        cur_task_rows = [(r[0], r[1], r[2], "", today) for r in cur_all.fetchall()]
-        print(f"[Feedback] weak_dim_names={weak_dim_names}, tasks={len(cur_task_rows)}")
-        if weak_dim_names and cur_task_rows:
-            try:
-                llm_feedback = await _generate_feedback_events(profile, weak_dim_names, cur_task_rows)
-            except Exception as e:
-                logger.warning(f"[Feedback] LLM generation failed: {e}")
+        try:
+            from app.db.redis import get_redis
+            _r = await get_redis()
+            _raw = await _r.get(llm_cache_key)
+            if _raw:
+                llm_feedback = json.loads(_raw)
+        except Exception:
+            pass
+
+        if not llm_feedback:
+            # 收集进行中/已完成任务（或全部任务）
+            cur_all = await db.execute(
+                text("SELECT id, title, status FROM daily_tasks "
+                     "WHERE user_id = :uid ORDER BY id LIMIT 10"),
+                {"uid": uid})
+            cur_task_rows = [(r[0], r[1], r[2], "", today) for r in cur_all.fetchall()]
+            print(f"[Feedback] weak_dim_names={weak_dim_names}, tasks={len(cur_task_rows)}")
+            if weak_dim_names and cur_task_rows:
+                try:
+                    llm_feedback = await _generate_feedback_events(profile, weak_dim_names, cur_task_rows)
+                    if llm_feedback:
+                        try:
+                            from app.db.redis import get_redis
+                            _r = await get_redis()
+                            await _r.setex(llm_cache_key, 3600,
+                                           json.dumps(llm_feedback, ensure_ascii=False, default=str))
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.warning(f"[Feedback] LLM generation failed: {e}")
 
         # 薄弱点聚合分析 ← 从 LLM 反馈的 problem 里提取关键薄弱点
         llm_weak_tags = _extract_weak_tags(llm_feedback) if llm_feedback else []
@@ -343,12 +362,18 @@ async def _generate_feedback_events(profile, weak_dims, task_rows):
             content = content[start:end]
         # strict=False 允许 JSON 中非法的转义字符（如 \x）
         items = json.loads(content, strict=False)
-    except json.JSONDecodeError:
-        content = content.strip()
+    except json.JSONDecodeError as e:
+        logger.warning(f"[Feedback-LLM] JSONDecodeError: {e}")
+        # 尝试逐段修复：常见问题是 \ 后跟非 JSON 转义
+        import re as _re4
+        content = _re4.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', content)
         try:
-            items = json.loads(content, strict=False) if content.startswith("[") else []
+            items = json.loads(content, strict=False)
         except json.JSONDecodeError:
             items = []
+    except Exception as e:
+        logger.warning(f"[Feedback-LLM] parse error: {e}")
+        items = []
     print(f"[Feedback-LLM] parsed items: {len(items)}")
 
     # 用序号对齐真实 task_id（LLM 可能不按输入返回 task_id）
