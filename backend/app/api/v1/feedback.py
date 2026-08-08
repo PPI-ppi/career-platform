@@ -114,6 +114,9 @@ async def get_feedback(user: dict = Depends(get_current_user)):
         task_rows = task_logs.fetchall()
         for row in task_rows:
             tid, title, old_s, new_s, created = row
+            # 只展示进行中和已完成，跳过待开始
+            if new_s not in ("in_progress", "completed"):
+                continue
             d = _to_date(created)
             wd = _weekday(d)
             st_label = {"pending": "待开始", "in_progress": "进行中", "completed": "已完成"}.get(new_s, new_s)
@@ -138,6 +141,11 @@ async def get_feedback(user: dict = Depends(get_current_user)):
                 llm_feedback = await _generate_feedback_events(profile, weak_dim_names, task_rows)
             except Exception as e:
                 logger.warning(f"[Feedback] LLM generation failed: {e}")
+
+        # 薄弱点聚合分析 ← 从 LLM 反馈的 problem 里提取关键薄弱点
+        llm_weak_tags = _extract_weak_tags(llm_feedback) if llm_feedback else []
+        if llm_weak_tags:
+            weak_tags = llm_weak_tags
 
         # === Trend ===
         trend_data = []
@@ -193,6 +201,42 @@ async def get_feedback(user: dict = Depends(get_current_user)):
         pass
 
     return resp
+
+
+def _extract_weak_tags(llm_feedback: list) -> list:
+    """从 LLM 反馈的 problem 里提取关键薄弱点词条。"""
+    if not llm_feedback:
+        return []
+    # 聚合 problem 中出现的关键薄弱点
+    counter = {}
+    # 常见薄弱点关键词（维度+技能）
+    KEYWORDS = [
+        "Python", "面向对象", "装饰器", "生成器", "NumPy", "Pandas", "Matplotlib",
+        "Git", "版本控制", "数据库", "SQL", "分布式", "并发", "缓存", "Redis",
+        "算法", "数据结构", "机器学习", "深度学习", "前端", "后端", "架构",
+        "调试", "测试", "单元测试", "部署", "CI/CD", "Docker", "微服务",
+        "沟通", "团队协作", "文档", "代码规范", "项目经验", "实习",
+    ]
+    for fb in llm_feedback:
+        text = (fb.get("problem") or "") + (fb.get("weakness") or "")
+        for kw in KEYWORDS:
+            if kw.lower() in text.lower():
+                counter[kw] = counter.get(kw, 0) + 1
+
+    # 若没有命中关键词，退回用维度名
+    if not counter:
+        for fb in llm_feedback:
+            t = fb.get("weakness") or fb.get("problem") or ""
+            # 提取"XX维度"形式的短语
+            import re as _re2
+            m = _re2.findall(r'([一-龥]{2,6}维度)', t)
+            for dim in m:
+                counter[dim] = counter.get(dim, 0) + 1
+
+    tags = [{"text": k, "highlight": True, "score": max(20, 100 - v * 10)}
+            for k, v in counter.items()]
+    tags.sort(key=lambda t: -t["score"])
+    return tags[:12]
 
 
 def _to_date(val):
@@ -253,7 +297,12 @@ async def _generate_feedback_events(profile, weak_dims, task_rows):
     resp = await llm.ainvoke(prompt)
     content = resp.content if hasattr(resp, "content") else str(resp)
 
-    # Parse JSON
+    # Parse JSON（宽松处理非法转义）
+    import re as _re3
+    # 修复 JSON 中非法转义：把 \x (x不是引号/斜杠/b/f/n/r/t/u) 替换为 \\
+    content = _re3.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', content)
+
+    items = []
     try:
         if "```" in content:
             start = content.find("[")
