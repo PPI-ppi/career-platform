@@ -94,15 +94,13 @@
                   </div>
                 </div>
                 <el-button
-                  :type="isJobLocked(job) ? 'primary' : 'default'"
-                  :icon="isJobLocked(job) ? Lock : Unlock"
-                  :loading="lockingKey === getJobKey(job)"
-                  :disabled="!!lockingKey && lockingKey !== getJobKey(job)"
+                  :type="isFavorited(job) ? 'warning' : 'default'"
+                  :icon="isFavorited(job) ? StarFilled : Star"
                   size="small"
-                  :class="['lock-btn', { locked: isJobLocked(job) }]"
-                  @click.stop="lockJob(idx)"
+                  :class="['fav-btn', { favorited: isFavorited(job) }]"
+                  @click.stop="toggleFavorite(job)"
                 >
-                  {{ isJobLocked(job) ? '已锁定' : '锁定' }}
+                  {{ isFavorited(job) ? '已收藏' : '收藏' }}
                 </el-button>
                 <el-icon
                   v-if="job.job_id"
@@ -135,7 +133,6 @@
               <el-icon><Histogram /></el-icon>
               七维度对标详情
             </h3>
-            <img src="@/assets/3D grow.png" class="dim-decoration" />
             <div class="dimensions-grid">
               <div
                 v-for="(dim, idx) in dimensionList"
@@ -184,15 +181,13 @@
           <!-- 查看岗位详情按钮 -->
           <div class="action-footer">
             <el-button
-              :type="isJobLocked(selectedJob) ? 'primary' : 'success'"
+              :type="isFavorited(selectedJob) ? 'warning' : 'primary'"
               size="large"
-              class="lock-main-btn"
-              :icon="isJobLocked(selectedJob) ? Lock : Unlock"
-              :loading="lockingKey === getJobKey(selectedJob)"
-              :disabled="!!lockingKey && lockingKey !== getJobKey(selectedJob)"
-              @click="lockJob(selectedIndex)"
+              class="fav-main-btn"
+              :icon="isFavorited(selectedJob) ? StarFilled : Star"
+              @click="toggleFavorite(selectedJob)"
             >
-              {{ isJobLocked(selectedJob) ? '取消锁定当前岗位' : '锁定为我的学习目标' }}
+              {{ isFavorited(selectedJob) ? '取消收藏当前岗位' : '收藏当前岗位' }}
             </el-button>
             <el-button
               v-if="selectedJob.job_id"
@@ -211,22 +206,21 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import {
   DataAnalysis, List, Location, Money,
   ChatDotRound, Histogram, Warning, Aim, Link,
-  Briefcase, OfficeBuilding, Lock, Unlock
+  Briefcase, OfficeBuilding, Star, StarFilled
 } from '@element-plus/icons-vue'
 import { matchingApi } from '@/api/matching'
+import { favoritesApi } from '@/api/favorites'
 import { currentRadarData, dimensionDetailsRaw, matchVersion } from './profileState.js'
 import InteractiveLoading from '@/components/InteractiveLoading.vue'
 
 const router = useRouter()
-const hasMatchData = inject('hasMatchData', ref(false))
-const parentSelectedJob = inject('selectedJob', ref(null))
 
 // ==================== 缓存 ====================
 const CACHE_KEY = 'job_match_cache'
@@ -265,8 +259,7 @@ let progressTimer = null
 
 const hasData = computed(() => rankedResults.value.length > 0)
 const selectedJob = computed(() => rankedResults.value[selectedIndex.value] || {})
-const lockedJobKey = ref('')
-const lockingKey = ref('')
+const favoritedJobIds = ref(new Set())
 
 const dimensionList = computed(() => {
   const scores = selectedJob.value.scores || {}
@@ -286,8 +279,6 @@ const startMatch = async () => {
   loading.value = true
   rankedResults.value = []
   selectedIndex.value = 0
-
-  // 不清除旧锁定 — 让用户手动切换
 
   clearCache()
   // 清除成长追踪缓存，触发重新加载
@@ -372,70 +363,46 @@ const selectJob = (idx) => {
   nextTick(() => updateRadarChart())
 }
 
-// ==================== 锁定岗位 ====================
-const getJobKey = (job = {}) => {
-  if (!job || Object.keys(job).length === 0) return ''
-  return String(job.job_id || `${job.job_title || ''}__${job.company || ''}`)
+// ==================== 收藏岗位 ====================
+const isFavorited = (job) => {
+  const id = job && job.job_id != null ? String(job.job_id) : ''
+  return !!id && favoritedJobIds.value.has(id)
 }
 
-const isJobLocked = (job) => !!lockedJobKey.value && lockedJobKey.value === getJobKey(job)
-
-const clearLocalLockState = () => {
-  lockedJobKey.value = ''
-  hasMatchData.value = false
-  parentSelectedJob.value = null
-  sessionStorage.removeItem('growth_tracker_cache')
-}
-
-const lockJob = async (idx) => {
-  const job = rankedResults.value[idx]
-  const key = getJobKey(job)
-  if (!job || !key || lockingKey.value) return
-
-  lockingKey.value = key
+const loadFavoriteState = async () => {
   try {
-    if (isJobLocked(job)) {
-      await matchingApi.clearSelectedJob()
-      clearLocalLockState()
-      ElMessage.info('已取消锁定')
-      return
-    }
-
-    selectedIndex.value = idx
-    await matchingApi.selectJob(job)
-    lockedJobKey.value = key
-    hasMatchData.value = true
-    parentSelectedJob.value = job
-    sessionStorage.removeItem('growth_tracker_cache')
-    ElMessage.success(`已锁定「${job.job_title || '我的学习目标'}」`)
-  } catch (err) {
-    console.error('[JobMatch] lock job failed:', err)
-    ElMessage.error(isJobLocked(job) ? '取消锁定失败，请重试' : '锁定失败，请重试')
-  } finally {
-    lockingKey.value = ''
+    const { data } = await favoritesApi.list()
+    favoritedJobIds.value = new Set((data.favorites || []).map((f) => String(f.job_id)))
+  } catch {
+    // 未登录等场景忽略
   }
 }
 
-// 恢复锁定状态
-const restoreLockState = async () => {
+const toggleFavorite = async (job) => {
+  const id = job && job.job_id != null ? Number(job.job_id) : null
+  if (id == null || Number.isNaN(id)) {
+    ElMessage.warning('该岗位暂不支持收藏')
+    return
+  }
+  const isFav = isFavorited(job)
   try {
-    const { data } = await matchingApi.getSelectedJob()
-    if (data.success && data.data) {
-      const saved = data.data
-      const idx = rankedResults.value.findIndex(
-        j => getJobKey(j) === getJobKey(saved) || (j.job_title === saved.job_title && j.company === saved.company)
-      )
-      if (idx >= 0) {
-        lockedJobKey.value = getJobKey(rankedResults.value[idx])
-        hasMatchData.value = true
-        parentSelectedJob.value = rankedResults.value[idx]
-      } else {
-        lockedJobKey.value = getJobKey(saved)
-        hasMatchData.value = true
-        parentSelectedJob.value = saved
-      }
+    if (isFav) {
+      await favoritesApi.remove(id)
+      const next = new Set(favoritedJobIds.value)
+      next.delete(String(id))
+      favoritedJobIds.value = next
+      ElMessage.success(`已取消收藏「${job.job_title || '该岗位'}」`)
+    } else {
+      await favoritesApi.add(id)
+      const next = new Set(favoritedJobIds.value)
+      next.add(String(id))
+      favoritedJobIds.value = next
+      ElMessage.success(`已收藏「${job.job_title || '该岗位'}」`)
     }
-  } catch { /* ignore */ }
+  } catch (err) {
+    console.error('[JobMatch] toggleFavorite failed:', err)
+    ElMessage.error(isFav ? '取消收藏失败，请重试' : '收藏失败，请重试')
+  }
 }
 
 // ==================== 雷达图 ====================
@@ -581,6 +548,7 @@ const handleResize = () => radarInstance?.resize()
 
 onMounted(async () => {
   window.addEventListener('resize', handleResize)
+  loadFavoriteState()
 
   // 从 MySQL 恢复已锁定的岗位
   try {
@@ -928,15 +896,15 @@ watch(currentRadarData, (newVal, oldVal) => {
         }
       }
 
-      .lock-btn {
+      .fav-btn {
         flex-shrink: 0;
         width: 82px;
         border-radius: 10px;
         font-weight: 600;
         transition: all 0.2s;
 
-        &.locked {
-          box-shadow: 0 4px 12px rgba(80, 152, 249, 0.22);
+        &.favorited {
+          box-shadow: 0 4px 12px rgba(232, 158, 90, 0.28);
         }
       }
 
@@ -975,19 +943,6 @@ watch(currentRadarData, (newVal, oldVal) => {
 .dimensions-card {
   position: relative;
   overflow: hidden;
-
-  .dim-decoration {
-    position: absolute;
-    bottom: -150px;
-    right: -50px;
-    width: 800px;
-    height: 500px;
-    opacity: 0.12;
-    pointer-events: none;
-    z-index: 0;
-    -webkit-mask-image: radial-gradient(ellipse at center, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 75%);
-    mask-image: radial-gradient(ellipse at center, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 75%);
-  }
 
   .dimensions-grid {
     display: grid;
@@ -1095,7 +1050,7 @@ watch(currentRadarData, (newVal, oldVal) => {
   margin-top: 8px;
   padding: 16px 0;
 
-  .lock-main-btn,
+  .fav-main-btn,
   .detail-btn {
     border-radius: 12px;
     padding: 12px 32px;
@@ -1107,9 +1062,9 @@ watch(currentRadarData, (newVal, oldVal) => {
     }
   }
 
-  .lock-main-btn {
+  .fav-main-btn {
     border: none;
-    box-shadow: 0 4px 16px rgba(107, 208, 137, 0.25);
+    box-shadow: 0 4px 16px rgba(232, 158, 90, 0.28);
   }
 
   .detail-btn {

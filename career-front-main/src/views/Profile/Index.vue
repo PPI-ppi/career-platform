@@ -177,12 +177,11 @@ const _moduleState = {
 </script>
 
 <script setup>
-import { ref, nextTick, computed, onMounted, onUnmounted, provide, watch } from 'vue'
+import { ref, nextTick, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Upload, MagicStick } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { learningPlanApi } from '@/api/learningPlan'
-import { matchingApi } from '@/api/matching'
 import * as mammoth from 'mammoth'
 
 // 导入你的子组件
@@ -275,13 +274,19 @@ const removeFile = () => {
 
 const activeTab = ref('info')
 
+// 路由 → tab 同步函数（含所有子页）
+const syncTabFromRoute = (path) => {
+  if (path.includes('/profile/info')) activeTab.value = 'info'
+  else if (path.includes('/profile/match')) activeTab.value = 'match'
+  else if (path.includes('/profile/growth')) activeTab.value = 'growth'
+  else if (path.includes('/profile/favorites')) activeTab.value = 'favorite'
+  else if (path.includes('/profile/report-export')) activeTab.value = 'report-export'
+}
+
 // 从 URL 同步初始 tab
 const router = useRouter()
 const route = useRoute()
-if (route.path.includes('/profile/match')) activeTab.value = 'match'
-else if (route.path.includes('/profile/growth')) activeTab.value = 'growth'
-else if (route.path.includes('/profile/favorites')) activeTab.value = 'favorite'
-else if (route.path.includes('/profile/report-export')) activeTab.value = 'report-export'
+syncTabFromRoute(route.path)
 const loading = ref(false)
 const isStreaming = ref(false)
 const inputValue = ref('')
@@ -290,13 +295,6 @@ const userInfo = ref(_moduleState.userInfo)
 
 // isInfoFilled 不持久化，切回来时显示聊天界面
 const isInfoFilled = ref(false)
-
-// 向子页面（能力对标）提供已锁定学习目标状态
-const hasMatchData = ref(false)
-provide('hasMatchData', hasMatchData)
-
-const selectedJob = ref(null)
-provide('selectedJob', selectedJob)
 
 // --- 聊天状态（使用模块级数据，SPA 内切换保留） ---
 const currentStepIndex = ref(_moduleState.currentStepIndex)
@@ -361,22 +359,10 @@ onMounted(async () => {
   if (!isInfoFilled.value && chatMessages.value.length === 0) {
     initChatGreeting()
   }
-  // 检查后端是否有锁定岗位（而非仅看 sessionStorage 缓存）
-  try {
-    const { data } = await matchingApi.getSelectedJob()
-    hasMatchData.value = !!(data.success && data.data)
-    selectedJob.value = data.success && data.data ? data.data : null
-  } catch {
-    hasMatchData.value = false
-    selectedJob.value = null
-  }
 })
 
-// 路由变化时同步 tab（解决从岗位详情返回时 tab 重置的问题）
-watch(() => route.path, (path) => {
-  if (path.includes('/profile/match')) activeTab.value = 'match'
-  else if (path.includes('/profile/favorites')) activeTab.value = 'favorite'
-})
+// 路由变化时同步 tab（解决 dropdown 导航时某些 tab 不切换的问题）
+watch(() => route.path, (path) => syncTabFromRoute(path))
 
 // 组件销毁前同步状态到模块级变量
 onUnmounted(() => {
@@ -404,11 +390,6 @@ const handleReset = () => {
   _moduleState.chatMessages = []
   _moduleState.chatGreeted = false
   _moduleState.currentStepIndex = 0
-
-  // 清除匹配状态：没有画像就不该有岗位匹配
-  hasMatchData.value = false
-  selectedJob.value = null
-  matchingApi.clearSelectedJob().catch(() => {})
 
   // 清除所有相关缓存
   sessionStorage.removeItem('job_match_cache')

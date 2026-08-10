@@ -4,31 +4,13 @@
       <div class="search-container">
         <el-input
           v-model="searchQuery"
-          placeholder="搜索职位、公司或关键词"
+          placeholder="搜索关键词"
           :prefix-icon="Search"
           size="large"
           class="custom-search"
           @input="debounceSearch"
         />
         <el-button type="primary" size="large" class="search-btn" @click="handleSearch">搜索</el-button>
-      </div>
-
-      <div class="filter-categories">
-        <span
-          v-for="category in filterCategories"
-          :key="category.type"
-          class="category-item"
-          @click="openFilterDialog(category.type)"
-        >
-          {{ category.label }}
-          <el-icon><ArrowDown /></el-icon>
-        </span>
-      </div>
-
-      <div class="tag-container" v-if="selectedTags.length > 0">
-        <el-tag v-for="tag in selectedTags" :key="tag.value" closable round @close="removeTag(tag)">
-          {{ tag.label }}
-        </el-tag>
       </div>
     </header>
 
@@ -127,27 +109,13 @@
         </div>
       </aside>
     </main>
-
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="520px" center>
-      <div class="filter-dialog-content">
-        <el-checkbox-group v-model="selectedOptions">
-          <el-checkbox v-for="option in filterOptions[activeFilterType]" :key="option.value" :label="option.value" border>
-            {{ option.label }}
-          </el-checkbox>
-        </el-checkbox-group>
-      </div>
-      <template #footer>
-        <el-button @click="dialogVisible = false" round>取消</el-button>
-        <el-button type="primary" @click="confirmSelection" round>确认</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, ArrowDown, Pointer, Loading, Location } from '@element-plus/icons-vue'
+import { Search, Pointer, Loading, Location } from '@element-plus/icons-vue'
 import { jobsApi } from '@/api/jobs'
 import img1 from '@/assets/1.png'
 import img2 from '@/assets/2.png'
@@ -210,10 +178,6 @@ const parseJobRequirements = (text) => {
 }
 
 const searchQuery = ref('')
-const activeFilterType = ref(null)
-const dialogVisible = ref(false)
-const selectedOptions = ref([])
-const selectedTags = ref([])
 const hoveredJob = ref(null)
 const allJobs = ref([])
 const currentPage = ref(1)
@@ -251,7 +215,7 @@ const mapJobs = (jobs) => jobs.map((item, index) => ({
 }))
 
 const loadJobs = async (reset = true) => {
-  const isDefaultView = !searchQuery.value && selectedTags.value.length === 0
+  const isDefaultView = !searchQuery.value
 
   // 1. 默认视图：先秒显缓存
   if (reset && isDefaultView) {
@@ -263,19 +227,12 @@ const loadJobs = async (reset = true) => {
 
   // 2. 后台拉接口
   try {
-    const params = {}
-    selectedTags.value.forEach((tag) => {
-      if (tag.type === 'industry' || tag.type === 'city') {
-        params[tag.type] = tag.value
-      }
-    })
-
     let data
     if (searchQuery.value) {
-      const resp = await jobsApi.list({ ...params, keyword: searchQuery.value, page: 1, page_size: 200 })
+      const resp = await jobsApi.list({ keyword: searchQuery.value, page: 1, page_size: 200 })
       data = resp.data
     } else {
-      const resp = await jobsApi.list({ ...params, page: currentPage.value, page_size: 200 })
+      const resp = await jobsApi.list({ page: currentPage.value, page_size: 200 })
       data = resp.data
     }
 
@@ -309,17 +266,7 @@ const loading = ref(false)
 const count = ref(20)
 const step = 20
 
-const salaryFilteredJobs = computed(() => {
-  const salaryTags = selectedTags.value.filter(t => t.type === 'salary')
-  if (salaryTags.length === 0) return allJobs.value
-  return allJobs.value.filter(job => {
-    return salaryTags.some(tag => salaryInRange(job.salary, tag.value))
-  })
-})
-
-const filteredJobs = computed(() => {
-  return salaryFilteredJobs.value
-})
+const filteredJobs = computed(() => allJobs.value)
 
 const displayedJobs = computed(() => {
   return filteredJobs.value.slice(0, count.value)
@@ -352,287 +299,12 @@ const debounceSearch = () => {
   }, 300)
 }
 
-// --- Filter functions ---
-const openFilterDialog = (type) => {
-  activeFilterType.value = type
-  selectedOptions.value = []
-  dialogVisible.value = true
-}
-
-const confirmSelection = () => {
-  if (selectedOptions.value.length === 0) {
-    dialogVisible.value = false
-    return
-  }
-  const options = filterOptions[activeFilterType.value]
-  const newTags = selectedOptions.value.map(val => ({
-    type: activeFilterType.value,
-    value: val,
-    label: options.find(o => o.value === val)?.label || val
-  }))
-
-  // For industry/city: replace existing tags of same type (single select)
-  if (activeFilterType.value === 'industry' || activeFilterType.value === 'city') {
-    selectedTags.value = selectedTags.value.filter(t => t.type !== activeFilterType.value)
-  }
-  selectedTags.value.push(...newTags)
-  count.value = 20
-  currentPage.value = 1
-  dialogVisible.value = false
-  // Reload from backend when industry or city changes
-  if (activeFilterType.value === 'industry' || activeFilterType.value === 'city') {
-    loadJobs()
-  }
-}
-
-const removeTag = (tag) => {
-  selectedTags.value = selectedTags.value.filter(t => t !== tag)
-  currentPage.value = 1
-  count.value = 20
-  if (tag.type === 'industry' || tag.type === 'city') {
-    loadJobs()
-  }
-}
-
 const goToJobDetail = (id) => {
   router.push({ name: 'JobDetail', params: { id } })
-}
-
-function parseSalaryRange(salaryStr) {
-  if (!salaryStr) return { min: 0, max: 0 }
-  const cleaned = salaryStr.replace(/,/g, '')
-  // Match patterns like "6k-8k", "10k-15k", "60k以上", "0k以下", "面议"
-  const rangeMatch = cleaned.match(/([\d.]+)k?\s*[-~至到]\s*([\d.]+)k?/)
-  if (rangeMatch) {
-    return { min: parseFloat(rangeMatch[1]), max: parseFloat(rangeMatch[2]) }
-  }
-  const aboveMatch = cleaned.match(/([\d.]+)k?\s*以上/)
-  if (aboveMatch) {
-    return { min: parseFloat(aboveMatch[1]), max: Infinity }
-  }
-  const belowMatch = cleaned.match(/([\d.]+)k?\s*以下/)
-  if (belowMatch) {
-    return { min: 0, max: parseFloat(belowMatch[1]) }
-  }
-  const singleMatch = cleaned.match(/([\d.]+)k?/)
-  if (singleMatch) {
-    const v = parseFloat(singleMatch[1])
-    return { min: v, max: v }
-  }
-  return { min: 0, max: 0 }
-}
-
-function salaryInRange(salaryStr, rangeValue) {
-  if (!salaryStr || rangeValue === '0') return true
-  const job = parseSalaryRange(salaryStr)
-  if (job.min === 0 && job.max === 0) return true
-
-  if (rangeValue.endsWith('+')) {
-    const filterMin = parseInt(rangeValue)
-    return job.max >= filterMin
-  }
-  const parts = rangeValue.split('-')
-  if (parts.length !== 2) return true
-  const filterMin = parseInt(parts[0].replace('k', ''))
-  const filterMax = parseInt(parts[1].replace('k', ''))
-  if (isNaN(filterMin) || isNaN(filterMax)) return true
-  // Range overlap: job's range intersects with filter range
-  return job.min <= filterMax && job.max >= filterMin
-}
-
-const filterCategories = [
-  { type: 'industry', label: '行业' },
-  { type: 'salary', label: '薪资' },
-  { type: 'city', label: '城市' }
-]
-
-const dialogTitle = computed(() => {
-  const cat = filterCategories.find(c => c.type === activeFilterType.value)
-  return cat ? `筛选${cat.label}` : '筛选'
-})
-
-const filterOptions = {
-  industry: [
-    { value: '计算机软件', label: '计算机软件' },
-    { value: 'IT服务', label: 'IT服务' },
-    { value: '互联网', label: '互联网' },
-    { value: '人工智能', label: '人工智能' },
-    { value: '电子/半导体/集成电路', label: '电子/半导体' },
-    { value: '通信/网络设备', label: '通信/网络' },
-    { value: '仪器仪表制造', label: '仪器仪表' },
-    { value: '计算机硬件', label: '计算机硬件' },
-    { value: '学术/科研', label: '学术/科研' },
-    { value: '电子设备制造', label: '电子设备制造' },
-    { value: '企业服务', label: '企业服务' },
-    { value: '工业自动化', label: '工业自动化' },
-    { value: '医药制造', label: '医药制造' },
-    { value: '物联网', label: '物联网' },
-    { value: '新媒体', label: '新媒体' },
-    { value: '咨询服务', label: '咨询服务' },
-    { value: '生物工程', label: '生物工程' },
-    { value: '专业技术服务', label: '专业技术服务' }
-  ],
-
-  salary: [
-    { value: '0', label: '不限' },
-    { value: '0-5k', label: '5k以下' },
-    { value: '5k-10k', label: '5k-10k' },
-    { value: '10k-15k', label: '10k-15k' },
-    { value: '15k-25k', label: '15k-25k' },
-    { value: '25k-40k', label: '25k-40k' },
-    { value: '40k-60k', label: '40k-60k' },
-    { value: '60k+', label: '60k以上' }
-  ],
-
-  city: [
-    { value: '北京', label: '北京' },
-    { value: '深圳', label: '深圳' },
-    { value: '上海', label: '上海' },
-    { value: '广州', label: '广州' },
-    { value: '南京', label: '南京' },
-    { value: '成都', label: '成都' },
-    { value: '杭州', label: '杭州' },
-    { value: '武汉', label: '武汉' },
-    { value: '郑州', label: '郑州' },
-    { value: '苏州', label: '苏州' },
-    { value: '西安', label: '西安' },
-    { value: '重庆', label: '重庆' },
-    { value: '长沙', label: '长沙' },
-    { value: '济南', label: '济南' },
-    { value: '沈阳', label: '沈阳' },
-    { value: '合肥', label: '合肥' },
-    { value: '天津', label: '天津' },
-    { value: '青岛', label: '青岛' }
-  ]
 }
 </script>
 
 <style scoped lang="scss">
-
-/* ========================================================== */
-/* ✨ 筛选弹窗重构：极简 AI 雾面质感 */
-/* ========================================================== */
-
-/* 1. 修改弹窗主体 */
-/* ========================================================== */
-/* ✨ 幻彩雾面：低饱和度彩色浮层 */
-/* ========================================================== */
-
-:deep(.el-dialog) {
-  border-radius: 24px !important;
-  /* 1. 🌟 核心修改：将纯白背景改为低饱和度的淡蓝色，增加色彩倾向 */
-  background: #f0f7ff !important; 
-  /* 2. 🌟 核心修改：增加一层极薄的毛玻璃，透出后面的渐变底色 */
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  /* 3. 🌟 核心修改：使用带蓝色的彩色阴影，让它“漂浮”在背景上 */
-  box-shadow: 0 20px 60px rgba(64, 158, 255, 0.12) !important; 
-  border: 1px solid rgba(255, 255, 255, 0.6) !important;
-  transition: all 0.3s ease;
-
-  .el-dialog__header {
-    padding: 25px 30px 5px;
-    text-align: left;
-    .el-dialog__title {
-      font-size: 19px;
-      color: #303133;
-      font-weight: bold;
-      letter-spacing: 0.5px;
-    }
-  }
-
-  .filter-dialog-content {
-    padding: 20px 25px; // 增加内边距，让内容呼吸感更好
-    
-    .el-checkbox-group {
-      display: grid;
-      /* 🌟 核心修改：每行固定 3 列，并自动填充宽度 */
-      grid-template-columns: repeat(3, 1fr); 
-      gap: 12px;
-      justify-items: stretch;
-    }
-
-    :deep(.el-checkbox) {
-      margin-right: 0;
-      height: 44px; // 固定高度，视觉更统一
-      padding: 0 !important; // 取消原本的 padding
-      border-radius: 12px !important;
-      background: rgba(255, 255, 255, 0.7) !important;
-      border: 1px solid rgba(255, 255, 255, 0.9) !important;
-      transition: all 0.25s ease;
-      
-      display: flex;
-      align-items: center;
-      justify-content: center; /* 文字居中 */
-
-      /* 隐藏原本的小方框 */
-      .el-checkbox__input { display: none; }
-      
-      .el-checkbox__label { 
-        padding-left: 0; 
-        color: #606266; 
-        font-size: 14px;
-        text-align: center;
-        width: 100%;
-      }
-
-      /* 选中态：由生硬的深蓝改为更有质感的浅蓝渐变 */
-      &.is-checked {
-        background: linear-gradient(135deg, #409eff 0%, #66b1ff 100%) !important;
-        border-color: transparent !important;
-        box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
-        .el-checkbox__label { 
-          color: #fff !important; 
-          font-weight: 600; 
-        }
-      }
-
-      &:hover:not(.is-checked) {
-        background: #ffffff !important;
-        transform: translateY(-2px);
-        border-color: #409eff !important;
-        box-shadow: 0 4px 10px rgba(64, 158, 255, 0.1);
-      }
-    }
-  }
-
-  /* 适配小屏幕：如果选项太窄，自动改为 2 列 */
-  @media (max-width: 500px) {
-    .filter-dialog-content .el-checkbox-group {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-
-  /* 底部按钮区域微调 */
-  .el-dialog__footer {
-    padding: 15px 30px 25px;
-    background: rgba(255, 255, 255, 0.2); /* 底部微亮 */
-    border-top: 1px solid rgba(255, 255, 255, 0.4);
-    
-    .el-button {
-      height: 40px;
-      border-radius: 12px;
-      font-weight: bold;
-      transition: all 0.3s ease;
-      
-      &.el-button--primary {
-        /* 使用你搜索按钮的渐变色 */
-        background: linear-gradient(135deg, #77b1f8 0%, #8c97f6 100%) !important;
-        border: none !important;
-        box-shadow: 0 6px 15px rgba(140, 151, 246, 0.3);
-        &:hover { opacity: 0.9; transform: scale(1.02); }
-      }
-      
-      &:not(.el-button--primary) {
-        background: transparent;
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        color: #909399;
-        &:hover { background: rgba(255, 255, 255, 0.4); }
-      }
-    }
-  }
-}
-
 .job-explorer {
   padding: 14px 60px 30px;
   width: 100%;
@@ -648,7 +320,6 @@ const filterOptions = {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-}
 
 /* --- 1. 顶部搜索区：液态玻璃 --- */
 .search-header {
@@ -695,9 +366,7 @@ const filterOptions = {
   }
 
   /* 确保内容在光斑之上 */
-  .search-container,
-  .filter-categories,
-  .tag-container {
+  .search-container {
     position: relative;
     z-index: 1;
   }
@@ -747,38 +416,6 @@ const filterOptions = {
       }
     }
   }
-
-  .filter-categories {
-    display: flex;
-    justify-content: center;
-    gap: 18px;
-    .category-item {
-      cursor: pointer;
-      font-size: 13px;
-      color: #4e5969;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 14px;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.35);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.4);
-      transition: all 0.3s ease;
-      &:hover {
-        color: #409EFF;
-        background: rgba(255, 255, 255, 0.55);
-        border-color: rgba(64, 158, 255, 0.15);
-      }
-    }
-  }
-
-  .tag-container {
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 14px;
-  }
 }
 
 /* --- 2. 主体分栏布局：大圆角与呼吸感 --- */
@@ -800,6 +437,14 @@ const filterOptions = {
   padding: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.03); /* 🎨 超淡灰蓝阴影：增加悬浮感 */
   border: 1px solid rgba(255, 255, 255, 0.5); /* 白色描边：调淡，营造玻璃边缘感 */
+}
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
 }
 
 .job-card-container {
@@ -1335,5 +980,6 @@ const filterOptions = {
 
     &:hover { opacity: 1; }
   }
+}
 }
 </style>

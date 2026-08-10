@@ -376,7 +376,7 @@ import * as echarts from 'echarts'
 import gsap from 'gsap'
 import taskThumb from '@/assets/retouch_2026080621010945.png'
 import { resumeApi } from '@/api/resume'
-import { trainingApi } from '@/api/training'
+import { learningPlanApi } from '@/api/learningPlan'
 import { currentRadarData } from '@/views/Profile/profileState'
 import { useAuthStore } from '@/stores/auth'
 
@@ -699,13 +699,27 @@ const statusClass = (s) => {
   return 'status-todo'
 }
 
+// 后端任务状态 → 中文标签（与个性化实训台保持一致）
+const normalizeStatus = (s) => {
+  if (s === 'completed' || s === '已完成') return '已完成'
+  if (s === 'in_progress' || s === '进行中') return '进行中'
+  return '未开始'
+}
+
 // ----- 获取数据 -----
 const fetchCoverflowTasks = async () => {
   coverflowLoading.value = true
   let list = []
   try {
-    const { data } = await trainingApi.preview({ limit: 10 })
-    list = Array.isArray(data) ? data : (data?.data || data?.tasks || data?.items || [])
+    // 与个性化实训台共用同一数据源（learning-plan/tasks）
+    const { data } = await learningPlanApi.getTasks()
+    const raw = Array.isArray(data) ? data : (data?.tasks || [])
+    list = raw.map((t) => ({
+      id: t.id,
+      title: t.title || t.task || t.content || '',
+      description: t.description || '',
+      status: normalizeStatus(t.status),
+    }))
   } catch {
     // API 不可用
   }
