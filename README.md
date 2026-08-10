@@ -1,6 +1,6 @@
-# 职途无限 (INFINITE PATH) — AI 职业规划平台
+# 职途无限 (INFINITE PATH) — AI 职业教育平台
 
-基于 LangGraph 多智能体 + RAG 检索增强生成的一站式职业规划系统，提供简历分析、岗位匹配、职业规划、学习计划、报告生成五大核心能力。
+基于 LangGraph 多智能体 + RAG 检索增强生成的一站式职业教育系统，提供用户能力画像、岗位能力模型、职业发展路径、能力提升计划四大核心能力。
 
 ---
 
@@ -10,7 +10,7 @@
 |------|------|
 | 前端 | Vue 3 + Vite + Element Plus + ECharts + AntV G6 |
 | 后端 | FastAPI + LangGraph + LangChain + SQLAlchemy 2.0 |
-| LLM | DeepSeek (deepseek-chat) / 通义千问 (qwen-plus) |
+| LLM | DeepSeek (deepseek-chat) |
 | 向量检索 | ChromaDB + BGE-small-zh 嵌入模型 |
 | 知识图谱 | Neo4j 5 |
 | 数据库 | SQLite（本地开发）/ MySQL 8.0 |
@@ -36,11 +36,10 @@
 │  │   SHA-256 缓存 · 指数退避重试 · 超时控制 · 运行追踪            │  │
 │  └──────────────────────────┬─────────────────────────────────────┘  │
 │                              │                                       │
-│  ┌────────┬────────┬────────┬┴───────┬────────┐                     │
-│  │ 简历   │ 岗位   │ 职业   │ 学习   │ 报告   │                     │
-│  │ 分析   │ 匹配   │ 规划   │ 计划   │ 生成   │                     │
-│  │ Agent  │ Agent  │ Agent  │ Agent  │ Agent  │                     │
-│  └────────┴────────┴────────┴────────┴────────┘                     │
+│  ┌──────────┬──────────┬──────────┬──────────┐                       │
+│  │  用户能力画像  │  岗位能力模型  │  职业发展路径  │  能力提升计划  │                       │
+│  │    Agent    │    Agent    │    Agent    │    Agent    │                       │
+│  └──────────┴──────────┴──────────┴──────────┘                       │
 │                                                                      │
 │  共享基础设施: LLM工厂 · 重试工具 · SubModuleTracer · RAG检索 · 数据库 · Redis │
 └──────────────────────────────────────────────────────────────────────┘
@@ -50,34 +49,33 @@
    (向量检索)     (知识图谱)       (持久存储)
 ```
 
-### 五大核心智能体
+### 四大核心智能体
 
 | 智能体 | agent_id | 节点数 | LLM调用 | 超时 | 可缓存 |
 |--------|----------|--------|---------|------|--------|
-| 简历分析 | `resume_analyzer` | 9 | 3~5 次 | 300s | 是 |
-| 岗位匹配 | `job_matcher` | 7 | 0 次 (子模块间接调用) | 300s | 否 |
-| 职业规划 | `career_planner` | 6 | 2 次 | 300s | 是 |
-| 学习计划 | `learning_plan` | 8 | 1 次/action | 300s | 是 |
-| 报告生成 | `report` | 4 | 1 次 | 180s | 否 |
+| 用户能力画像 | `resume_analyzer` | 8 | 3~4 次 | 300s | 是 |
+| 岗位能力模型 | `job_matcher` | 7 | 0 次 (子模块间接调用) | 300s | 否 |
+| 职业发展路径 | `career_planner` | 6 | 2 次 | 300s | 是 |
+| 能力提升计划 | `learning_plan` | 8 | 1 次/action | 300s | 是 |
 
 ### 直接 LLM 端点（不经过 Harness，已统一超时保护）
 
 | 端点 | 说明 | 超时 |
 |------|------|------|
 | `POST /diagnosis/generate` | AI 深度诊断（雷达图 → 文字报告） | 60s |
-| `POST /learning-plan/coach` | 职业教练对话 | 30s |
-| `POST /learning-plan/coach/stream` | 职业教练对话（SSE 流式） | 30s |
+| `POST /learning-plan/coach` | 职业教练 / 实训导师对话 | 30s |
+| `POST /learning-plan/coach/stream` | 职业教练 / 实训导师对话（SSE 流式） | 30s |
 | `POST /learning-plan/daily-tasks` | 每日学习任务 | 60s |
 | `POST /learning-plan/generate` | 学习计划生成 | 60s |
 
 ### 数据流
 
 ```
-上传简历 → resume_analyzer → 用户画像 (7维雷达图)
+上传简历 → resume_analyzer → 用户能力画像 (7维雷达图)
                                   │
                     ┌─────────────┼─────────────┐
                     ▼             ▼             ▼
-              job_matcher    diagnosis API   用户查看报告
+              job_matcher    diagnosis API   用户查看画像/诊断
                     │
                     ▼
               匹配结果 Top5
@@ -89,9 +87,10 @@
            ▼                 ▼
      career_plans      daily_tasks
            │                 │
-           └────────┬────────┘
-                    ▼
-              report 智能体 → 完整报告 (TXT/Word/PDF)
+           └───────┬─────────┘
+                   ▼
+      个性化实训台 (/training)  →  coach 端点 (实训导师模式) → 任务指导/能力评估
+      反馈与复盘中心 (/feedback) →  反馈数据 / 学习复盘
 ```
 
 ---
@@ -234,11 +233,17 @@ Vite 开发代理自动将 `/api` 请求转发到 `http://localhost:8000`。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| POST | `/learning-plan/parse-file` | 解析学习计划文件 |
 | POST | `/learning-plan/generate` | 生成学习计划 |
-| GET | `/learning-plan/daily-tasks` | 获取每日任务 |
 | POST | `/learning-plan/polish` | 润色学习计划 |
 | POST | `/learning-plan/adjust` | 调整学习任务 |
 | POST | `/learning-plan/export` | 导出学习计划 |
+| POST | `/learning-plan/daily-tasks` | 生成每日任务（两步 LLM） |
+| GET | `/learning-plan/tasks` | 获取任务列表 |
+| PUT | `/learning-plan/tasks/{task_id}` | 更新任务 |
+| POST | `/learning-plan/tasks/{task_id}/complete` | 完成任务 |
+| POST | `/learning-plan/coach` | 职业教练 / 实训导师对话 |
+| POST | `/learning-plan/coach/stream` | 职业教练 / 实训导师对话（SSE 流式） |
 
 ### 岗位 `/api/v1/jobs`
 
@@ -263,7 +268,7 @@ Vite 开发代理自动将 `/api` 请求转发到 `http://localhost:8000`。
 |------|------|------|
 | POST | `/diagnosis/generate` | AI 深度诊断报告 |
 
-### 报告 `/api/v1/report`
+### 报告 `/api/v1/report`（已废弃，无前端使用）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -295,7 +300,7 @@ career-platform/
 │   │   │   ├── matching.py           #   岗位匹配
 │   │   │   ├── career_plan.py        #   职业规划
 │   │   │   ├── learning_plan.py      #   学习计划
-│   │   │   ├── report.py             #   报告生成
+│   │   │   ├── report.py             #   报告生成 (已废弃)
 │   │   │   ├── diagnosis.py          #   AI 诊断
 │   │   │   ├── jobs.py               #   岗位查询
 │   │   │   ├── favorites.py          #   收藏
@@ -306,11 +311,11 @@ career-platform/
 │   │   │   ├── registry.py           #   智能体注册
 │   │   │   ├── llm_factory.py        #   LLM 实例工厂
 │   │   │   ├── retry.py              #   重试工具 + SubModuleTracer
-│   │   │   ├── resume_analyzer/      #   简历分析智能体
-│   │   │   ├── job_matcher/          #   岗位匹配智能体
-│   │   │   ├── career_planner/       #   职业规划智能体
-│   │   │   ├── learning_plan/        #   学习计划智能体
-│   │   │   └── report/               #   报告生成智能体
+│   │   │   ├── resume_analyzer/      #   用户能力画像智能体
+│   │   │   ├── job_matcher/          #   岗位能力模型智能体
+│   │   │   ├── career_planner/       #   职业发展路径智能体
+│   │   │   ├── learning_plan/        #   能力提升计划智能体
+│   │   │   └── report/               #   报告生成智能体 (已废弃)
 │   │   ├── rag/                      # RAG 检索模块
 │   │   │   ├── embedding.py          #   嵌入模型
 │   │   │   ├── vector_store.py       #   ChromaDB 向量库
@@ -339,10 +344,9 @@ career-platform/
 │   │   │   └── Profile/              #   个人中心
 │   │   │       ├── PersonalInfo.vue  #     个人画像
 │   │   │       ├── JobMatch.vue      #     岗位匹配
-│   │   │       ├── GrowthTracker.vue #     学习计划
+│   │   │       ├── GrowthTracker.vue #     个性化实训台/任务指导
 │   │   │       ├── FavoriteJobs.vue  #     收藏岗位
-│   │   │       ├── PolishAndExport.vue#    报告导出
-│   │   │       └── AIReport.vue      #     AI 报告
+│   │   │       └── PolishAndExport.vue#    反馈与复盘中心
 │   │   ├── components/               # 组件
 │   │   │   ├── RadarChart.vue        #   雷达图
 │   │   │   ├── JobKnowledgeGraph.vue #   知识图谱
@@ -373,7 +377,7 @@ career-platform/
 | `career_plans` | 职业规划 |
 | `learning_plans` | 学习计划 |
 | `daily_tasks` | 每日学习任务 |
-| `user_reports` | 生成的完整报告 |
+| `user_reports` | 生成的完整报告 (已废弃) |
 | `favorites` | 收藏岗位 |
 | `job_profiles` | LLM 生成的岗位画像 |
 | `promotion_transition` | 晋升路径 |
@@ -416,11 +420,10 @@ result = await harness.run(agent_id, input_data, user_id)  # 执行
 | Neo4j | 跳过图谱增强，匹配降级为纯 RAG+算法评分 | 首次失败输出 WARNING，记录影响范围 |
 | LLM 失败 | 返回本地算法兜底结果 | agent_runs 表记录失败详情 |
 | 证书评分 | 纯算法，不依赖 LLM | 无 |
-| 报告数据加载 | `return_exceptions=True`，部分数据缺失时降级生成 | 日志记录缺失的数据源 |
 
 ---
 
 ## 相关文档
 
-- [智能体流程图](智能体流程图.md) — 系统总框架 + 五大智能体流程 + 子模块详解
+- [智能体流程图](智能体流程图.md) — 系统总框架 + 四大核心智能体流程 + 子模块详解
 - [智能体图流程详解](智能体图流程详解.md) — 每个智能体的节点、参数、Prompt 详细说明
