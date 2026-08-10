@@ -1,6 +1,6 @@
 # 职途无限 (INFINITE PATH) — AI 职业教育平台
 
-基于 LangGraph 多智能体 + RAG 检索增强生成的一站式职业教育系统，提供用户能力画像、岗位能力模型、能力需求分析、能力提升计划、任务指导五大核心能力。
+基于 LangGraph 多智能体 + RAG 检索增强生成的一站式职业教育系统，提供用户能力画像、岗位能力模型、能力需求分析、周任务生成器、任务指导五大核心能力。
 
 ---
 
@@ -37,7 +37,7 @@
 │  └──────────────────────────┬─────────────────────────────────────┘  │
 │                              │                                       │
 │  ┌──────────┬──────────┬──────────┬──────────┬──────────┐              │
-│  │  用户能力画像  │  岗位能力模型  │  能力需求分析  │  能力提升计划  │  任务指导  │              │
+│  │  用户能力画像  │  岗位能力模型  │  能力需求分析  │  周任务生成器  │  任务指导  │              │
 │  │    Agent    │    Agent    │    Agent    │    Agent    │    Agent    │              │
 │  └──────────┴──────────┴──────────┴──────────┴──────────┘              │
 │                                                                      │
@@ -56,7 +56,7 @@
 | 用户能力画像 | `resume_analyzer` | 8 | 3~4 次 | 300s | 是 |
 | 岗位能力模型 | `job_matcher` | 7 | 0 次 (子模块间接调用) | 300s | 否 |
 | 能力需求分析 | `career_planner` | 7 | 3 次 | 300s | 是 |
-| 能力提升计划 | `learning_plan` | 8 | 1 次/action | 300s | 是 |
+| 周任务生成器 | `weekly_task_generator` | 4 | 1 次 | 60s | 否 |
 | 任务指导 | `task_guide` | 6 | 1 次/轮 | 30s | 否 |
 
 ### 直接 LLM 端点（不经过 Harness，已统一超时保护）
@@ -66,8 +66,8 @@
 | `POST /diagnosis/generate` | AI 深度诊断（雷达图 → 文字报告） | 60s |
 | `POST /learning-plan/coach` | 职业教练 / 实训导师对话 | 30s |
 | `POST /learning-plan/coach/stream` | 职业教练 / 实训导师对话（SSE 流式） | 30s |
-| `POST /learning-plan/daily-tasks` | 每日学习任务 | 60s |
-| `POST /learning-plan/generate` | 学习计划生成 | 60s |
+| `POST /learning-plan/daily-tasks` | 每日学习任务（已废弃） | 60s |
+| `POST /learning-plan/generate` | 学习计划生成（已废弃） | 60s |
 
 ### 数据流
 
@@ -83,13 +83,14 @@
                     │
            ┌────────┴────────┐
            ▼                 ▼
-    career_planner     learning_plan
-           │                 │
-           ▼                 ▼
-    能力需求风向标      学习计划 / 每日任务
-    (首页展示)                 │
-                               ▼
-                        task_guide (任务指导)
+    career_planner       weekly_task_generator
+           │                      │
+           ▼                      ▼
+    能力需求风向标          daily_tasks 表
+    (首页展示)              (7天周任务)
+                                 │
+                                 ▼
+                          task_guide (任务指导)
                                │
                                ▼
                          实训对话 / 能力评估
@@ -234,16 +235,16 @@ Vite 开发代理自动将 `/api` 请求转发到 `http://localhost:8000`。
 |------|------|------|
 | POST | `/career-plan/` | 生成职业规划 |
 
-### 学习计划 `/api/v1/learning-plan`
+### 学习计划 / 周任务 `/api/v1/learning-plan`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/learning-plan/parse-file` | 解析学习计划文件 |
-| POST | `/learning-plan/generate` | 生成学习计划 |
-| POST | `/learning-plan/polish` | 润色学习计划 |
-| POST | `/learning-plan/adjust` | 调整学习任务 |
-| POST | `/learning-plan/export` | 导出学习计划 |
-| POST | `/learning-plan/daily-tasks` | 生成每日任务（两步 LLM） |
+| POST | `/learning-plan/parse-file` | 解析学习计划文件（已废弃） |
+| POST | `/learning-plan/generate` | 生成学习计划（已废弃） |
+| POST | `/learning-plan/polish` | 润色学习计划（已废弃） |
+| POST | `/learning-plan/adjust` | 调整学习任务（已废弃） |
+| POST | `/learning-plan/export` | 导出学习计划（已废弃） |
+| POST | `/learning-plan/daily-tasks` | 生成每日任务（已废弃，周任务由智能体四生成） |
 | GET | `/learning-plan/tasks` | 获取任务列表 |
 | PUT | `/learning-plan/tasks/{task_id}` | 更新任务 |
 | POST | `/learning-plan/tasks/{task_id}/complete` | 完成任务 |
@@ -304,7 +305,7 @@ career-platform/
 │   │   │   ├── resume.py             #   简历
 │   │   │   ├── matching.py           #   岗位匹配
 │   │   │   ├── career_plan.py        #   职业规划
-│   │   │   ├── learning_plan.py      #   学习计划
+│   │   │   ├── learning_plan.py      #   学习计划 / 周任务 / 实训导师
 │   │   │   ├── report.py             #   报告生成 (已废弃)
 │   │   │   ├── diagnosis.py          #   AI 诊断
 │   │   │   ├── jobs.py               #   岗位查询
@@ -319,7 +320,7 @@ career-platform/
 │   │   │   ├── resume_analyzer/      #   用户能力画像智能体
 │   │   │   ├── job_matcher/          #   岗位能力模型智能体
 │   │   │   ├── career_planner/       #   能力需求分析智能体
-│   │   │   ├── learning_plan/        #   能力提升计划智能体
+│   │   │   ├── weekly_task_generator/ #   周任务生成器智能体
 │   │   │   ├── task_guide/           #   任务指导智能体
 │   │   │   └── report/               #   报告生成智能体 (已废弃)
 │   │   ├── rag/                      # RAG 检索模块
@@ -381,7 +382,7 @@ career-platform/
 | `matching_report` | 岗位匹配结果 |
 | `user_selected_job` | 锁定的目标岗位 |
 | `career_plans` | 职业规划 |
-| `learning_plans` | 学习计划 |
+| `learning_plans` | 学习计划 (已废弃) |
 | `daily_tasks` | 每日学习任务 |
 | `user_reports` | 生成的完整报告 (已废弃) |
 | `favorites` | 收藏岗位 |
@@ -408,11 +409,11 @@ result = await harness.run(agent_id, input_data, user_id)  # 执行
 - **指数退避重试**：1s → 2s → 4s，最多 3 次
 - **超时控制**：每个智能体独立超时配置
 - **运行追踪**：每次执行自动写入 `agent_runs` 表（状态、耗时、重试次数、输入输出）
-- **子模块追踪**：`SubModuleTracer` 为子模块（job_profiler / profile_analyzer / task_planner）提供超时保护和结构化日志
+- **子模块追踪**：`SubModuleTracer` 为子模块（job_profiler / profile_analyzer）提供超时保护和结构化日志
 
 ### RAG 检索增强
 
-岗位匹配和学习计划使用 ChromaDB 向量检索：
+岗位匹配和任务生成使用 ChromaDB 向量检索：
 
 1. **岗位向量化**：启动时将所有岗位描述导入 ChromaDB
 2. **语义搜索**：根据用户画像检索 top_k 相关岗位
