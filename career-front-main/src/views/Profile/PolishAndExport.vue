@@ -402,6 +402,7 @@ onUnmounted(() => {
   align-items: stretch;
   flex: 1;
   min-height: 0;
+  max-height: 480px;
 }
 
 .left-col {
@@ -494,7 +495,7 @@ onUnmounted(() => {
 /* ===== 右栏：时间线 ===== */
 .right-col {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   min-height: 0;
 }
 
@@ -503,7 +504,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: 420px;
+  height: 100%;
 }
 
 .timeline-banner {
