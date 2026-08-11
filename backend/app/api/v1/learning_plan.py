@@ -3,11 +3,13 @@ import json
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy import text
 from pydantic import BaseModel
 from typing import Optional, List
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from app.agents.harness import harness
 from app.agents.learning_plan import tools
+from app.db.mysql import AsyncSessionLocal
 from app.agents.learning_plan.profile_analyzer import analyze_profile
 from app.agents.learning_plan.task_planner import generate_daily_tasks as planner_generate
 from app.agents.llm_factory import get_llm
