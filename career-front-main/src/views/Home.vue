@@ -96,16 +96,20 @@
             <div class="prediction-main">
               <div class="predict-item">
                 <div class="predict-label-row">
-                  <span class="label">岗位能力达成度预测</span>
-                  <span class="value success-text">{{ calculateAchievement(category) }}%</span>
+                  <span class="label">岗位匹配度</span>
+                  <span class="value" :class="matchScoreClass(category)">
+                    {{ getMatchScore(category) ?? '--' }}<small v-if="getMatchScore(category) != null" class="score-unit">分</small>
+                  </span>
                 </div>
-                <el-progress 
-                  :percentage="calculateAchievement(category)" 
-                  :stroke-width="8" 
+                <el-progress
+                  v-if="getMatchScore(category) != null"
+                  :percentage="getMatchScore(category)"
+                  :stroke-width="8"
                   :show-text="false"
-                  color="#67c23a" 
+                  :color="matchProgressColor(category)"
                 />
-                <p class="base-info">基于你的技能基线评分: <strong>{{ competitivenessScore }}</strong></p>
+                <p v-if="getMatchScore(category) != null" class="base-info">基于你的七维能力画像对标分析</p>
+                <p v-else class="base-info base-info-empty">暂未对标该岗位，请前往「能力对标」完成分析</p>
               </div>
 
               <div class="salary-forecast-card">
@@ -377,7 +381,8 @@ import gsap from 'gsap'
 import taskThumb from '@/assets/retouch_2026080621010945.png'
 import { resumeApi } from '@/api/resume'
 import { learningPlanApi } from '@/api/learningPlan'
-import { currentRadarData } from '@/views/Profile/profileState'
+import { matchingApi } from '@/api/matching'
+import { currentRadarData, dimensionDetailsRaw } from '@/views/Profile/profileState'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -478,13 +483,6 @@ watch([hasProfile, currentRadarData], () => {
   }
 }, { deep: true })
 
-// 计算能力达成度：个人分 / 岗位要求分 (假设 category 里有要求分)
-const calculateAchievement = (category) => {
-  const baseRate = 70; // 基础分
-  const scoreDiff = (competitivenessScore.value - 700) / 10;
-  return Math.min(98, Math.max(40, Math.floor(baseRate + scoreDiff)));
-};
-
 // 稀缺度指数对应的标签颜色：高=红 中=橙 低=绿
 const scarcityType = (category) => {
   const s = category.insight?.scarcity
@@ -497,28 +495,64 @@ const scarcityType = (category) => {
 const generateAgentDecision = (category) =>
   category.insight?.decision || '建议优先补齐该岗位的核心技能缺口，再对标投递。';
 
-const skillCompleteness = ref(0)
-const competitivenessScore = ref(0)
-const skillGaps = ref([])
+const jobMatchResults = ref([])
+
+// 从「能力对标」缓存或 API 获取岗位匹配结果（与 JobMatch 页共用同一数据源）
+const loadJobMatchResults = async () => {
+  try {
+    // 1. 优先读 JobMatch 页写入的缓存
+    const raw = sessionStorage.getItem('job_match_cache')
+    if (raw) {
+      const cached = JSON.parse(raw)
+      if (cached.results?.length) {
+        jobMatchResults.value = cached.results
+        return
+      }
+    }
+    // 2. 无缓存 → 直接调用对标接口（结果会同时写入 JobMatch 缓存）
+    if (currentRadarData.value && currentRadarData.value.some(v => v > 0)) {
+      const { data } = await matchingApi.match({
+        radar_data: currentRadarData.value,
+        dimension_details: dimensionDetailsRaw.value || undefined,
+      })
+      const payload = data.data || data
+      const results = payload.ranked_results || payload.match_results || payload.matches || []
+      if (results.length) jobMatchResults.value = results
+    }
+  } catch {
+    // 对标数据不可用则保持空，popover 显示未对标提示
+  }
+}
+
+// 按岗位名在匹配结果中查找分数（与 JobMatch 的 total_score 一致）
+const getMatchScore = (category) => {
+  const name = category?.name || ''
+  const match = jobMatchResults.value.find((j) =>
+    j.job_title && name && (j.job_title === name || j.job_title.includes(name) || name.includes(j.job_title)))
+  return match && typeof match.total_score === 'number' ? match.total_score : null
+}
+
+const matchScoreClass = (category) => {
+  const s = getMatchScore(category)
+  if (s == null) return ''
+  if (s >= 85) return 'score-excellent'
+  if (s >= 70) return 'score-good'
+  return 'score-warning'
+}
+
+const matchProgressColor = (category) => {
+  const s = getMatchScore(category)
+  if (s == null) return '#c0c4cc'
+  if (s >= 85) return '#67c23a'
+  if (s >= 70) return '#409eff'
+  return '#e6a23c'
+}
 
 // 从 resume_analyzer 获取数据
 const fetchDashboardData = async () => {
   try {
     const resumeRes = await resumeApi.analyze({})
-    // 竞争力评分 & 技能完整度
     const rData = resumeRes.data
-    if (rData.competitiveness) {
-      const score = rData.competitiveness.score || rData.competitiveness
-      competitivenessScore.value = typeof score === 'number' && score <= 1
-        ? Math.round(score * 100)
-        : Math.round(score)
-    }
-    if (rData.completeness_flags) {
-      const flags = rData.completeness_flags
-      const total = Object.keys(flags).length || 7
-      const filled = Object.values(flags).filter(Boolean).length
-      skillCompleteness.value = Math.round((filled / total) * 100)
-    }
     // 能力缺口
     if (rData.skill_analysis) {
       const s = rData.skill_analysis
@@ -1035,6 +1069,7 @@ onMounted(() => {
 onMounted(() => {
   checkProfileStatus()
   fetchDashboardData()
+  loadJobMatchResults()
   window.addEventListener('resize', handleResize)
 })
 
@@ -1497,6 +1532,11 @@ const handleResize = () => {
         .success-text { color: #67c23a; }
       }
       .base-info { font-size: 11px; color: #909399; margin-top: 5px; }
+      .base-info-empty { font-style: italic; }
+      .score-unit { font-size: 12px; color: #94a3b8; margin-left: 2px; font-weight: 600; }
+      .score-excellent { color: #67c23a; }
+      .score-good { color: #409eff; }
+      .score-warning { color: #e6a23c; }
     }
 
     .salary-forecast-card {
