@@ -488,13 +488,13 @@ onUnmounted(() => {
 .trend-chart {
   flex: 1;
   width: 100%;
-  min-height: 240px;
+  min-height: 80px;
 }
 
 /* ===== 右栏：时间线 ===== */
 .right-col {
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   min-height: 0;
 }
 
@@ -503,8 +503,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100%;
-  min-height: 540px;
+  max-height: 420px;
 }
 
 .timeline-banner {
@@ -535,7 +534,6 @@ onUnmounted(() => {
   gap: 16px;
   cursor: pointer;
   padding: 8px 0;
-  flex: 1;
   transition: background 0.2s;
   border-radius: 8px;
 }
