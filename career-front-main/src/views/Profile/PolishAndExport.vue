@@ -402,7 +402,7 @@ onUnmounted(() => {
   align-items: stretch;
   flex: 1;
   min-height: 0;
-  max-height: 480px;
+  max-height: 540px;
 }
 
 .left-col {
