@@ -142,21 +142,11 @@
               v-model="chatInputValue"
               type="textarea"
               :autosize="{ minRows: 1, maxRows: 4 }"
-              :placeholder="selectedTask && selectedTask.status === 'completed' ? '任务已完成，仍可继续向导师提问' : '完成任务的思考过程，有不懂的地方随时向导师提问，完成后可提交答案'"
+              :placeholder="selectedTask && selectedTask.status === 'completed' ? '任务已完成，仍可继续向导师提问' : '完成任务的思考过程，有不懂的地方随时向导师提问'"
               resize="none"
               @keydown.enter.exact.prevent="sendChatMessage"
             />
             <div class="input-btns">
-              <el-button
-                class="submit-btn"
-                type="success"
-                plain
-                :disabled="!chatInputValue.trim() || isCoachingLoading"
-                @click="submitAnswer"
-              >
-                <el-icon><CircleCheck /></el-icon>
-                提交答案
-              </el-button>
               <el-button
                 type="primary"
                 :disabled="!chatInputValue.trim() || isCoachingLoading"
@@ -416,32 +406,6 @@ const sendChatMessage = async () => {
   } catch (err) {
     console.error('[GrowthTracker] sendChatMessage error:', err)
     chatHistory.value.push({ role: 'assistant', content: '抱歉，AI 实训导师暂时不可用，请稍后再试。' })
-  } finally {
-    isCoachingLoading.value = false
-    scrollChatToBottom()
-  }
-}
-
-const submitAnswer = async () => {
-  const text = chatInputValue.value.trim()
-  if (!text || isCoachingLoading.value) return
-  chatHistory.value.push({ role: 'user', content: `【提交答案】${text}` })
-  chatInputValue.value = ''
-  isCoachingLoading.value = true
-  scrollChatToBottom()
-  try {
-    const task = selectedTask.value
-    const resp = await learningPlanApi.coach(
-      `这是我提交的任务「${task.text}」的答案：${text}。请评估我的掌握程度，指出不足并给出下一步改进建议。`,
-      chatHistory.value.slice(0, -1),
-      { task_context: `任务：${task.text}；要求：${task.desc || '无'}；这是用户的最终提交，请作为导师评估`, submission: true }
-    )
-    chatHistory.value.push({ role: 'assistant', content: resp.data?.reply || '已收到你的答案，正在评估...' })
-    // 提交答案成功 → 任务标记为已完成
-    await completeTask(task)
-  } catch (err) {
-    console.error('[GrowthTracker] submitAnswer error:', err)
-    chatHistory.value.push({ role: 'assistant', content: '抱歉，提交失败，请稍后再试。' })
   } finally {
     isCoachingLoading.value = false
     scrollChatToBottom()
@@ -812,8 +776,6 @@ watch(currentRadarData, (newVal, oldVal) => {
   gap: 10px;
   margin-top: 10px;
 }
-.submit-btn { border-radius: 8px; }
-
 .chat-placeholder .placeholder-body {
   padding: 40px 20px;
   text-align: center;
