@@ -437,6 +437,8 @@ const submitAnswer = async () => {
       { task_context: `任务：${task.text}；要求：${task.desc || '无'}；这是用户的最终提交，请作为导师评估`, submission: true }
     )
     chatHistory.value.push({ role: 'assistant', content: resp.data?.reply || '已收到你的答案，正在评估...' })
+    // 提交答案成功 → 任务标记为已完成
+    await completeTask(task)
   } catch (err) {
     console.error('[GrowthTracker] submitAnswer error:', err)
     chatHistory.value.push({ role: 'assistant', content: '抱歉，提交失败，请稍后再试。' })
