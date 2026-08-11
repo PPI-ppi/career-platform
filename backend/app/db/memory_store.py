@@ -33,14 +33,67 @@ def _delete(key: str):
     _store.pop(key, None)
 
 
-# --- Connection (no-ops for compatibility) ---
+# --- Connection (in-memory Redis-compatible client) ---
+
+class _MemoryRedis:
+    """Minimal async Redis-compatible client backed by the in-memory dict store.
+
+    Lets call sites (e.g. feedback.py) use ``await r.get()`` / ``setex()`` /
+    ``delete()`` without failing when Redis is unavailable.
+    """
+
+    async def get(self, key: str) -> Any:
+        return _get(key)
+
+    async def setex(self, key: str, ttl: int, value: Any):
+        _set(key, value, ttl)
+
+    async def delete(self, key: str):
+        _delete(key)
+
+    async def exists(self, key: str) -> bool:
+        return _get(key) is not None
+
+    async def expire(self, key: str, ttl: int):
+        entry = _store.get(key)
+        if entry is not None:
+            _set(key, entry[0], ttl)
+
+    async def incr(self, key: str) -> int:
+        entry = _counters.get(key)
+        now = time.time()
+        if entry is None or now > entry[1]:
+            _counters[key] = (1, now + 60)
+            return 1
+        count, expire_ts = entry
+        _counters[key] = (count + 1, expire_ts)
+        return count + 1
+
+    async def hset(self, key: str, mapping: dict, **kwargs):
+        obj = _get(key)
+        if not isinstance(obj, dict):
+            obj = {}
+        obj.update(mapping)
+        _set(key, obj, None)
+
+    async def hgetall(self, key: str) -> dict:
+        obj = _get(key)
+        return obj if isinstance(obj, dict) else {}
+
+    async def lpush(self, key: str, value: Any):
+        obj = _get(key)
+        if not isinstance(obj, list):
+            obj = []
+        obj.insert(0, value)
+        _set(key, obj, None)
+
 
 async def get_redis_pool():
     return None
 
 
 async def get_redis():
-    return None
+    return _MemoryRedis()
 
 
 async def close_redis():

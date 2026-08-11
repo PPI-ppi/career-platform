@@ -148,6 +148,19 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 CREATE INDEX IF NOT EXISTS idx_agent_runs_agent_user ON agent_runs(agent_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status);
 
+-- Task status change log for feedback timeline
+CREATE TABLE IF NOT EXISTS task_status_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    task_id INTEGER NOT NULL,
+    task_title VARCHAR(255),
+    old_status VARCHAR(20),
+    new_status VARCHAR(20),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_status_log_user ON task_status_log(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS user_reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL UNIQUE,

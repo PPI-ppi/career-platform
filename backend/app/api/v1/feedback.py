@@ -1,4 +1,5 @@
 """Feedback & Review Center API — LLM-powered feedback based on user profile."""
+import asyncio
 import json
 import logging
 from datetime import date, timedelta
@@ -107,11 +108,14 @@ async def get_feedback(user: dict = Depends(get_current_user)):
         # === Timeline events: task status transitions from task_status_log ===
         events = []
 
-        task_logs = await db.execute(
-            text("SELECT task_id, task_title, old_status, new_status, created_at "
-                 "FROM task_status_log WHERE user_id = :uid ORDER BY created_at DESC LIMIT 20"),
-            {"uid": uid})
-        task_rows = task_logs.fetchall()
+        try:
+            task_logs = await db.execute(
+                text("SELECT task_id, task_title, old_status, new_status, created_at "
+                     "FROM task_status_log WHERE user_id = :uid ORDER BY created_at DESC LIMIT 20"),
+                {"uid": uid})
+            task_rows = task_logs.fetchall()
+        except Exception:
+            task_rows = []
         for row in task_rows:
             tid, title, old_s, new_s, created = row
             # 只展示进行中和已完成，跳过待开始
@@ -174,26 +178,15 @@ async def get_feedback(user: dict = Depends(get_current_user)):
             pass
 
         if not llm_feedback:
-            # 收集进行中/已完成任务（或全部任务）
+            # 收集任务数据，后台异步生成 LLM 反馈（不阻塞响应）
             cur_all = await db.execute(
                 text("SELECT id, title, status FROM daily_tasks "
                      "WHERE user_id = :uid ORDER BY id LIMIT 10"),
                 {"uid": uid})
             cur_task_rows = [(r[0], r[1], r[2], "", today) for r in cur_all.fetchall()]
-            print(f"[Feedback] weak_dim_names={weak_dim_names}, tasks={len(cur_task_rows)}")
             if weak_dim_names and cur_task_rows:
-                try:
-                    llm_feedback = await _generate_feedback_events(profile, weak_dim_names, cur_task_rows)
-                    if llm_feedback:
-                        try:
-                            from app.db.redis import get_redis
-                            _r = await get_redis()
-                            await _r.setex(llm_cache_key, 3600,
-                                           json.dumps(llm_feedback, ensure_ascii=False, default=str))
-                        except Exception:
-                            pass
-                except Exception as e:
-                    logger.warning(f"[Feedback] LLM generation failed: {e}")
+                asyncio.create_task(
+                    _generate_and_cache_feedback(uid, profile, weak_dim_names, cur_task_rows))
 
         # 薄弱点聚合分析 ← 从 LLM 反馈的 problem 里提取关键薄弱点
         llm_weak_tags = _extract_weak_tags(llm_feedback) if llm_feedback else []
@@ -245,13 +238,14 @@ async def get_feedback(user: dict = Depends(get_current_user)):
         },
     }
 
-    # 写 Redis 缓存（10分钟有效）
-    try:
-        from app.db.redis import get_redis
-        r = await get_redis()
-        await r.setex(cache_key, FB_CACHE_TTL, json.dumps(resp, ensure_ascii=False, default=str))
-    except Exception:
-        pass
+    # 写 Redis 缓存（仅当 LLM 反馈已就绪时才缓存，避免缓存空数据）
+    if llm_feedback:
+        try:
+            from app.db.redis import get_redis
+            r = await get_redis()
+            await r.setex(cache_key, FB_CACHE_TTL, json.dumps(resp, ensure_ascii=False, default=str))
+        except Exception:
+            pass
 
     return resp
 
@@ -395,3 +389,17 @@ async def _generate_feedback_events(profile, weak_dims, task_rows):
         })
 
     return events
+
+
+async def _generate_and_cache_feedback(uid: int, profile: dict, weak_dim_names: list, task_rows: list):
+    """在后台生成 LLM 反馈并写入独立缓存，下次请求即可读取。"""
+    try:
+        result = await _generate_feedback_events(profile, weak_dim_names, task_rows)
+        if result:
+            from app.db.redis import get_redis
+            _r = await get_redis()
+            await _r.setex(f"cache:feedback_llm:{uid}", 3600,
+                           json.dumps(result, ensure_ascii=False, default=str))
+            logger.info(f"[Feedback] Background LLM feedback cached for user {uid} ({len(result)} items)")
+    except Exception as e:
+        logger.warning(f"[Feedback] Background LLM generation failed: {e}")
